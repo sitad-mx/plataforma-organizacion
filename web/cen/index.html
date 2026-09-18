@@ -27,8 +27,8 @@
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, hoy, ESTADO_INFO, SEMAFORO_TXT, correoAlSG, mailto, ROOT, CFG } from '../assets/app.js';
-const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg']); if (!p) throw new Error('sin acceso');
+import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, ESTADO_INFO, SEMAFORO_TXT, correoAlSG, mailto, ROOT, CFG } from '../assets/app.js';
+const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas']); if (!p) throw new Error('sin acceso');
 await armazon({ titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
 const panel = $('#panel'); const esOrg = p.rol === 'cen_organizacion';
 const PANELES = { solicitudes, padron, secciones, tablero, trimestre };
@@ -97,7 +97,7 @@ async function padron() {
     <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Folio</th><th>Persona</th><th>CURP</th><th>Sección</th><th>Alta</th><th>Estatus</th><th></th></tr></thead><tbody id="p-filas"></tbody></table></div>`;
   const pintar = () => { const t = $('#p-texto').value.toLowerCase(); const l = data.filter(x => !t || (x.nombre_completo + x.folio + (x.curp || '')).toLowerCase().includes(t));
     $('#p-filas').innerHTML = l.length ? l.map(x => `<tr><td class="num">${x.numero_afiliacion}</td><td>${esc(x.folio)}</td><td>${esc(x.nombre_completo)}</td><td class="small">${esc(x.curp || '')}</td><td>${esc(x.seccion)}</td><td>${fecha(x.fecha_alta)}</td><td><span class="etiqueta ${x.estatus === 'Activo' ? 'verde' : x.estatus === 'Baja' ? 'carbon' : 'amarillo'}">${esc(x.estatus)}</span>${x.fecha_baja ? `<br><span class="tiny muted">${fecha(x.fecha_baja)} · ${esc(x.causa_baja)}</span>` : ''}</td>
-      <td class="small"><a href="${ROOT}documento.html?tipo=constancia&id=${x.id}" target="_blank">Constancia</a> · <a href="${ROOT}documento.html?tipo=credencial&id=${x.id}" target="_blank">Credencial</a>${esOrg && x.estatus === 'Activo' ? ` · <a href="#" data-baja="${x.id}">Baja</a>` : ''}</td></tr>`).join('') : '<tr><td colspan="8" class="vacio">Sin registros.</td></tr>';
+      <td class="small"><a href="${ROOT}documento.html?tipo=constancia&id=${x.id}" target="_blank">Constancia</a> · <a href="${ROOT}documento.html?tipo=gafete&id=${x.id}" target="_blank">Gafete</a> · <a href="${ROOT}documento.html?tipo=finanzas&id=${x.id}" target="_blank">Carta Finanzas</a> · <a href="${ROOT}documento.html?tipo=credencial&id=${x.id}" target="_blank">Credencial</a>${esOrg && x.estatus === 'Activo' ? ` · <a href="#" data-baja="${x.id}">Baja</a>` : ''}</td></tr>`).join('') : '<tr><td colspan="8" class="vacio">Sin registros.</td></tr>';
     $$('[data-baja]').forEach(a => a.onclick = e => { e.preventDefault(); baja(data.find(x => x.id === a.dataset.baja)); }); };
   $('#p-texto').oninput = pintar; pintar();
   $('#csv').onclick = () => descargarCSV('padron-' + hoy() + '.csv', data, ['numero_afiliacion', 'folio', 'nombre_completo', 'curp', 'seccion', 'fecha_alta', 'estatus', 'fecha_baja', 'causa_baja']);
@@ -112,12 +112,12 @@ function baja(x) {
 // ===== Secciones =====
 async function secciones() {
   panel.innerHTML = '<p class="cargando">Cargando secciones…</p>';
-  const { data, error } = await sb.from('v_secciones').select('id, numero, denominacion, entidad, slug, situacion, semaforo, afiliados_adscritos, cargos_vigentes, ultimo_contacto, dias_sin_contacto, notas').order('denominacion');
+  const { data, error } = await sb.from('v_secciones').select('id, numero, clave, liga_activa, denominacion, entidad, slug, situacion, semaforo, afiliados_adscritos, cargos_vigentes, solicitudes_en_tramite, asamblea_fecha_hora, ultimo_contacto, dias_sin_contacto, notas').order('denominacion');
   if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
-  panel.innerHTML = `<p class="small muted">La <b>liga de afiliación</b> de cada Sección constituida es la que se comparte a los trabajadores; solo las secciones con número la tienen activa.</p>
-    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Sección</th><th>Situación</th><th>Semáforo</th><th>Afiliados</th><th>Cargos vigentes</th><th>Liga de afiliación</th></tr></thead><tbody>
-    ${data.map(s => `<tr><td class="num">${s.numero ?? '—'}</td><td><b>${esc(s.denominacion)}</b><br><span class="tiny muted">${esc((s.notas || '').slice(0, 110))}${(s.notas || '').length > 110 ? '…' : ''}</span></td><td><span class="etiqueta ${s.situacion === 'Constituida' ? 'verde' : ''}">${esc(s.situacion)}</span></td><td>${esc(s.semaforo)}</td><td class="num">${s.afiliados_adscritos}</td><td class="num">${s.cargos_vigentes} / 12</td>
-      <td class="small">${s.numero ? `<code>${ROOT}afiliate/?s=${s.slug}</code> <button class="btn discreto chico" data-copiar="${ROOT}afiliate/?s=${s.slug}">Copiar</button>` : '<span class="muted">Sin número: inactiva</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+  panel.innerHTML = `<p class="small muted">La <b>liga de afiliación</b> de cada Sección es la que se comparte a los trabajadores; está activa en las Secciones constituidas o en constitución. El número de Sección lo asigna el CEN en el acuerdo de creación; mientras no exista, el folio usa la clave de entidad.</p>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No. · clave</th><th>Sección</th><th>Situación</th><th>Afiliados · en trámite</th><th>Cargos vigentes</th><th>Liga de afiliación</th></tr></thead><tbody>
+    ${data.map(s => `<tr><td class="num">${s.numero ?? '—'}<br><span class="tiny muted">${esc(s.clave)}</span></td><td><b>${esc(s.denominacion)}</b><br><span class="tiny muted">${esc((s.notas || '').slice(0, 110))}${(s.notas || '').length > 110 ? '…' : ''}</span></td><td><span class="etiqueta ${s.situacion === 'Constituida' ? 'verde' : s.situacion === 'Acuerdo del CEN' ? 'azul' : ''}">${esc(s.situacion)}</span>${s.asamblea_fecha_hora ? '<br><span class="tiny muted">constitutiva ' + esc(fechaHoraLarga(s.asamblea_fecha_hora)) + '</span>' : ''}</td><td class="num">${s.afiliados_adscritos} · ${s.solicitudes_en_tramite}</td><td class="num">${s.cargos_vigentes} / 12</td>
+      <td class="small">${s.liga_activa ? `<code>${ROOT}afiliate/?s=${s.slug}</code> <button class="btn discreto chico" data-copiar="${ROOT}afiliate/?s=${s.slug}">Copiar</button>` : '<span class="muted">Inactiva (sin acuerdo ni constitución)</span>'}</td></tr>`).join('')}</tbody></table></div>`;
   $$('[data-copiar]').forEach(b => b.onclick = () => navigator.clipboard.writeText(b.dataset.copiar).then(() => toast('Liga copiada.', 'ok')));
 }
 
@@ -126,7 +126,7 @@ async function tablero() {
   panel.innerHTML = '<p class="cargando">Calculando indicadores…</p>';
   const { data, error } = await sb.from('v_tablero').select('*').order('bloque').order('orden');
   if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
-  const BLOQUES = { 1: 'Estructura territorial', 2: 'Funcionalidad seccional', 3: 'Afiliación', 4: 'Movimientos', 5: 'Incidencias', 6: 'Constituciones y asambleas' };
+  const BLOQUES = { 1: 'Estructura territorial', 2: 'Funcionalidad seccional', 3: 'Afiliación', 4: 'Movimientos', 5: 'Incidencias', 6: 'Constituciones y asambleas', 7: 'Finanzas (cuotas)' };
   let html = `<p class="small muted">Fecha de corte: ${fechaLarga(hoy())}. Los indicadores se calculan solos a partir de la base.</p>`;
   for (const b of Object.keys(BLOQUES)) { const items = data.filter(x => x.bloque == b); if (!items.length) continue;
     html += `<div class="bloque-titulo">${b}. ${BLOQUES[b]}</div><div class="rejilla cuatro">${items.map(x => `<div class="cifra"><div class="valor ${/fuera de plazo|vencid|INTERVENCI/.test(x.indicador) && Number(x.valor) > 0 ? 'alerta' : ''}">${x.valor == null ? '—' : x.valor}${/\(%\)/.test(x.indicador) && x.valor != null ? '%' : ''}</div><div class="nombre" title="${esc(x.lectura)}">${esc(x.indicador.replace(' (%)', ''))}</div></div>`).join('')}</div>`; }

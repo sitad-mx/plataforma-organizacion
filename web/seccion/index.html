@@ -26,8 +26,8 @@ const p = await requerirRol(['seccion_organizacion', 'seccion_sg']); if (!p) thr
 await armazon({ titulo: p.secciones ? p.secciones.denominacion : 'Sección' });
 const sec = p.secciones; const esOrg = p.rol === 'seccion_organizacion'; const panel = $('#panel');
 $('#titulo').textContent = sec ? sec.denominacion : 'Sección';
-const liga = sec && sec.numero ? `${ROOT}afiliate/?s=${sec.slug}` : '';
-$('#liga').innerHTML = liga ? `<b>Liga de afiliación de tu Sección:</b><br><code>${liga}</code> <button class="btn discreto chico" id="copiar">Copiar</button>` : '<span class="muted">Tu Sección aún no tiene número asignado; la liga de afiliación se activa cuando lo tenga.</span>';
+const liga = sec ? `${ROOT}afiliate/?s=${sec.slug}` : '';
+$('#liga').innerHTML = liga ? `<b>Liga de afiliación de tu Sección:</b><br><code>${liga}</code> <button class="btn discreto chico" id="copiar">Copiar</button>` : '<span class="muted">Tu Sección aún no tiene liga activa.</span>';
 const c = $('#copiar'); if (c) c.onclick = () => navigator.clipboard.writeText(liga).then(() => toast('Liga copiada. Compártela a los trabajadores de tu Sección.', 'ok'));
 const P = { solicitudes, padron, directorio, guia };
 $$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); P[b.dataset.p](); });
@@ -61,7 +61,7 @@ function guia() {
     <ol>
       <li><b>Comparte la liga de afiliación</b> de tu Sección a los trabajadores. Con ella cada persona llena su solicitud y sube sus cinco documentos; queda ligada a tu Sección automáticamente.</li>
       <li><b>O recibe la papelería tú</b> (en persona o por correo) y regístrala con el botón "Registrar una solicitud recibida en la Sección". Captura los datos tal como vienen en la solicitud firmada y sube los documentos.</li>
-      <li><b>Cinco documentos, ninguno más:</b> identificación oficial (INE) por ambos lados, constancia de la CURP, solicitud AF-01 firmada de puño y letra, cédula de afiliación (Anexo 23) y aviso de privacidad firmado. No se pide recibo de nómina ni constancia fiscal.</li>
+      <li><b>Cinco documentos, ninguno más:</b> solicitud de afiliación firmada (Anexo 12 y 13: manifestación y aviso de privacidad, dos firmas de puño y letra), cédula de afiliación firmada (Anexo 23, todos los campos), identificación oficial (INE) por ambos lados, constancia de la CURP y Constancia de Situación Fiscal del SAT. <b>No se pide recibo de nómina.</b> Si la actividad es transporte de pasajeros o última milla, además tarjeta de circulación, póliza de seguro y licencia de manejo. La solicitud y la cédula las entrega el sistema prellenadas: la persona las imprime, las firma y las sube.</li>
       <li><b>La Secretaría de Organización del CEN revisa y dictamina</b> en un máximo de diez días hábiles. Si falta algo, previene una sola vez; la persona (o tú) sube lo faltante en "Consultar mi trámite".</li>
       <li><b>El Secretario General autoriza el alta.</b> Organización registra a la persona en el Padrón y expide constancia y credencial. Aquí ves el avance de cada folio y tu padrón adscrito.</li>
     </ol>

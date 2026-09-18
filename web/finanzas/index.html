@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finanzas · Cuotas · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
+    <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Comité Ejecutivo Nacional</p><h1>Secretaría de Finanzas · Cuotas</h1></div>
+    <div id="resumen" class="small muted"></div>
+  </div>
+  <div class="pestanas" id="pestanas"><button data-p="pendientes" class="activa">Por verificar</button><button data-p="historial">Padrón financiero</button><button data-p="nuevo">Registrar pago recibido por correo</button></div>
+  <section id="panel"><p class="cargando">Cargando…</p></section>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, $$, esc, toast, ocupado, armazon, requerirRol, fecha, fechaLarga, hoy, dinero, urlFirmada, subirArchivo, validarArchivo, mailto, ROOT, CFG } from '../assets/app.js';
+const p = await requerirRol(['finanzas', 'cen_organizacion', 'cen_lectura', 'sg']); if (!p) throw new Error('sin acceso');
+await armazon({ titulo: 'Secretaría de Finanzas', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }, { href: ROOT + 'finanzas/', texto: 'Finanzas', id: 'finanzas' }], activa: 'finanzas' });
+const puede = ['finanzas', 'cen_organizacion'].includes(p.rol); const panel = $('#panel');
+const P = { pendientes, historial, nuevo };
+$$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); P[b.dataset.p](); });
+pendientes();
+
+const fila = (x, acciones) => `<tr><td>${fecha(x.fecha_operacion)}</td><td><b>${esc(x.nombre)}</b><br><span class="tiny muted">${x.numero_afiliacion ? 'No. ' + x.numero_afiliacion : (x.curp ? 'CURP ' + esc(x.curp) : '')}${x.folio_solicitud ? ' · ' + esc(x.folio_solicitud) : ''}${x.afiliado_nombre ? ' · ' + esc(x.seccion || '') : ' · <span style="color:var(--ambar)">sin ligar al padrón</span>'}</span></td><td>${esc(x.periodo)}</td><td class="num">${dinero(x.monto)}</td><td><span class="etiqueta ${x.estado === 'Verificado' ? 'verde' : x.estado === 'Rechazado' ? 'rojo' : 'amarillo'}">${esc(x.estado)}</span>${x.comprobante_folio ? `<br><span class="tiny muted">${esc(x.comprobante_folio)}</span>` : ''}${x.observacion ? `<br><span class="tiny" style="color:var(--ambar)">${esc(x.observacion)}</span>` : ''}</td><td class="small">${x.comprobante_url ? `<a href="#" data-ver="${x.id}">Comprobante bancario</a>` : '—'}${x.estado === 'Verificado' ? ` · <a href="${ROOT}documento.html?tipo=comprobante&id=${x.id}" target="_blank">Comprobante de cuota</a>` : ''}${acciones ? ' · ' + acciones : ''}</td></tr>`;
+async function lista(filtroEstado) {
+  let q = sb.from('v_pagos').select('*').order('fecha_operacion', { ascending: false }).limit(500); if (filtroEstado) q = q.eq('estado', filtroEstado);
+  const { data, error } = await q; if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return null; } return data;
+}
+function enlazarVer(data) { $$('[data-ver]').forEach(a => a.onclick = async e => { e.preventDefault(); const x = data.find(y => y.id === a.dataset.ver); try { window.open(await urlFirmada(x.comprobante_url), '_blank'); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } }); }
+
+async function pendientes() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>'; const data = await lista('Recibido'); if (!data) return;
+  $('#resumen').textContent = `${data.length} pago(s) por verificar`;
+  panel.innerHTML = `<p class="small muted">Verifica cada operación contra el estado de cuenta bancario. Al verificar se asigna el número de comprobante y queda en el padrón financiero.</p>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobante · acciones</th></tr></thead><tbody>${data.length ? data.map(x => fila(x, puede ? `<button class="btn chico verde" data-ok="${x.id}">Verificar</button> <button class="btn discreto chico" data-no="${x.id}">Rechazar</button>` : '')).join('') : '<tr><td colspan="6" class="vacio">No hay pagos por verificar.</td></tr>'}</tbody></table></div>`;
+  enlazarVer(data);
+  $$('[data-ok]').forEach(b => b.onclick = async () => { const { error } = await sb.from('pagos_cuota').update({ estado: 'Verificado' }).eq('id', b.dataset.ok); if (error) toast(error.message, 'error'); else { toast('Pago verificado y comprobante emitido.', 'ok'); pendientes(); } });
+  $$('[data-no]').forEach(b => b.onclick = async () => { const o = prompt('Motivo del rechazo (se muestra a la persona):'); if (!o) return; const { error } = await sb.from('pagos_cuota').update({ estado: 'Rechazado', observacion: o }).eq('id', b.dataset.no); if (error) toast(error.message, 'error'); else { toast('Pago rechazado.', 'ok'); pendientes(); } });
+}
+async function historial() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>'; const data = await lista(null); if (!data) return;
+  const verificados = data.filter(x => x.estado === 'Verificado'); const total = verificados.reduce((a, x) => a + Number(x.monto), 0);
+  panel.innerHTML = `<div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem"><input type="text" id="h-texto" placeholder="Buscar por nombre, número, CURP o periodo" style="max-width:320px"><span class="small muted">${verificados.length} verificados · ${dinero(total)} acumulado</span><button class="btn secundario chico" id="csv" style="margin-left:auto">Descargar CSV</button></div>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobantes</th></tr></thead><tbody id="h-filas"></tbody></table></div>`;
+  const pintar = () => { const t = $('#h-texto').value.toLowerCase(); const l = data.filter(x => !t || [x.nombre, x.numero_afiliacion, x.curp, x.periodo, x.comprobante_folio].join(' ').toLowerCase().includes(t)); $('#h-filas').innerHTML = l.length ? l.map(x => fila(x, '')).join('') : '<tr><td colspan="6" class="vacio">Sin registros.</td></tr>'; enlazarVer(data); };
+  $('#h-texto').oninput = pintar; pintar();
+  $('#csv').onclick = () => { const cols = ['comprobante_folio', 'estado', 'fecha_operacion', 'nombre', 'numero_afiliacion', 'curp', 'seccion', 'periodo', 'monto', 'telefono', 'observacion']; const csv = '﻿' + cols.join(',') + '\n' + data.map(x => cols.map(c => `"${String(x[c] ?? '').replace(/"/g, '""')}"`).join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `padron-financiero-${hoy()}.csv`; a.click(); };
+}
+function nuevo() {
+  if (!puede) { panel.innerHTML = '<p class="small muted">Solo lectura.</p>'; return; }
+  panel.innerHTML = `<form id="f-nuevo" class="tarjeta" style="max-width:720px">
+    <p class="small muted">Para los comprobantes que llegan al correo de Finanzas. Se registra ya verificado si así lo indicas.</p>
+    <div class="campo"><label for="n-nombre">Nombre completo *</label><input type="text" id="n-nombre" required></div>
+    <div class="fila"><div class="campo"><label for="n-num">Número de afiliación</label><input type="number" id="n-num" min="1"></div><div class="campo"><label for="n-curp">CURP</label><input type="text" id="n-curp" maxlength="18" style="text-transform:uppercase"></div></div>
+    <div class="fila"><div class="campo"><label for="n-tel">Teléfono</label><input type="tel" id="n-tel"></div><div class="campo"><label for="n-periodo">Periodo *</label><input type="text" id="n-periodo" required></div></div>
+    <div class="fila"><div class="campo"><label for="n-monto">Monto *</label><input type="number" id="n-monto" required min="1" step="0.01" value="360"></div><div class="campo"><label for="n-fecha">Fecha de la operación *</label><input type="date" id="n-fecha" required value="${hoy()}"></div></div>
+    <div class="campo"><label for="n-archivo">Comprobante bancario</label><input type="file" id="n-archivo" accept="application/pdf,image/jpeg,image/png"></div>
+    <label class="casilla"><input type="checkbox" id="n-verificado" checked> <span>Ya verifiqué la operación en el banco (emitir comprobante)</span></label>
+    <div class="acciones"><button class="btn" type="submit" id="n-enviar">Registrar</button></div></form>`;
+  $('#f-nuevo').onsubmit = async e => {
+    e.preventDefault(); const v = id => $('#' + id).value.trim(); const btn = $('#n-enviar'); ocupado(btn, true, 'Registrando…');
+    try {
+      let ruta = null, nombreArchivo = null; const f = $('#n-archivo').files[0];
+      if (f) { const err = validarArchivo(f); if (err) throw new Error(err); ruta = `pagos/${(v('n-curp') || 'num-' + v('n-num') || 'sin').replace(/[^A-Z0-9-]/gi, '')}/${Date.now()}.${(f.name.split('.').pop() || 'pdf').toLowerCase()}`; await subirArchivo(ruta, f); nombreArchivo = f.name; }
+      const { data, error } = await sb.from('pagos_cuota').insert({ nombre: v('n-nombre'), numero_afiliacion: v('n-num') ? Number(v('n-num')) : null, curp: v('n-curp') || null, telefono: v('n-tel') || null, periodo: v('n-periodo'), monto: Number(v('n-monto')), fecha_operacion: v('n-fecha'), comprobante_url: ruta, comprobante_nombre: nombreArchivo, canal: 'finanzas' }).select('id').single();
+      if (error) throw error;
+      if ($('#n-verificado').checked) { const { error: e2 } = await sb.from('pagos_cuota').update({ estado: 'Verificado' }).eq('id', data.id); if (e2) throw e2; }
+      toast('Pago registrado.', 'ok'); $$('#pestanas button')[0].click();
+    } catch (err) { ocupado(btn, false); toast('No se pudo registrar: ' + (err.message || err), 'error'); }
+  };
+}
+</script>
+</body>
+</html>

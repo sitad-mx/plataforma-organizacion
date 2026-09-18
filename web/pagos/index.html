@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registrar pago de cuota · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido angosto">
+  <p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Secretaría de Finanzas</p>
+  <h1>Registrar mi pago de cuota sindical</h1>
+  <p class="muted">Primero haz tu depósito o transferencia a la cuenta oficial del Sindicato. Después registra aquí los datos de la operación y adjunta tu comprobante. Finanzas lo verifica y emite tu comprobante de cuota.</p>
+  <div class="tarjeta" id="cuenta"><p class="cargando">Cargando datos de la cuenta…</p></div>
+  <form id="forma" class="tarjeta mt-2" novalidate>
+    <h3>Datos del pago (los siete de la carta de Finanzas)</h3>
+    <div class="campo"><label for="nombre">1. Nombre completo *</label><input type="text" id="nombre" required autocomplete="name"></div>
+    <div class="fila">
+      <div class="campo"><label for="num">2. Número de afiliación</label><input type="number" id="num" min="1" placeholder="Si ya lo tienes"></div>
+      <div class="campo"><label for="curp">CURP (si aún no tienes número)</label><input type="text" id="curp" maxlength="18" style="text-transform:uppercase"></div>
+    </div>
+    <div class="fila">
+      <div class="campo"><label for="tel">3. Teléfono de contacto *</label><input type="tel" id="tel" required placeholder="10 dígitos"></div>
+      <div class="campo"><label for="periodo">4. Mes o período de la cuota *</label><input type="text" id="periodo" required placeholder="p. ej. Octubre 2026"></div>
+    </div>
+    <div class="fila">
+      <div class="campo"><label for="monto">5. Monto pagado (pesos) *</label><input type="number" id="monto" required min="1" step="0.01"></div>
+      <div class="campo"><label for="fecha">6. Fecha de la operación *</label><input type="date" id="fecha" required></div>
+    </div>
+    <div class="campo"><label for="archivo">7. Comprobante bancario (PDF o imagen legible) *</label><input type="file" id="archivo" accept="application/pdf,image/jpeg,image/png" required><span class="ayuda">Máximo 5 MB.</span></div>
+    <div id="errores" class="aviso error oculto"></div>
+    <div class="acciones"><button class="btn" type="submit" id="enviar">Registrar pago</button></div>
+  </form>
+  <div id="resultado"></div>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, esc, toast, ocupado, param, armazon, dinero, fechaLarga, hoy, subirArchivo, validarArchivo, ROOT, CFG } from '../assets/app.js';
+await armazon({ titulo: 'Cuota sindical' });
+const { data: cfg } = await sb.rpc('config_publica'); const C = cfg || {};
+$('#cuenta').innerHTML = `<h3>Cuenta oficial del Sindicato</h3>
+  <dl class="datos"><dt>Cuota</dt><dd><b>${dinero(C.cuota_monto || 360)}</b> ${esc(C.cuota_periodicidad || 'mensual')}</dd><dt>Cómo pagar</dt><dd>Depósito o transferencia a la cuenta que te indicó la Secretaría de Finanzas en tu carta de bienvenida (AF-09). En el concepto escribe <b>tu nombre completo + tu número de Sección</b> (ejemplo: JUAN PÉREZ GARCÍA – SECCIÓN 21).</dd><dt>Dudas</dt><dd><a href="mailto:${esc(C.correo_finanzas || CFG.CORREO_FINANZAS)}">${esc(C.correo_finanzas || CFG.CORREO_FINANZAS)}</a></dd></dl>
+  <p class="tiny muted mb-0">Por seguridad, los datos bancarios no se muestran en esta página pública: están en tu carta de Finanzas.</p>`;
+if (param('curp')) $('#curp').value = param('curp'); if (param('num')) $('#num').value = param('num'); $('#fecha').value = hoy();
+if (C.cuota_monto) $('#monto').value = C.cuota_monto;
+$('#curp').addEventListener('input', e => e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+$('#forma').onsubmit = async e => {
+  e.preventDefault(); const v = id => $('#' + id).value.trim(); const errores = [];
+  if (v('nombre').length < 5) errores.push('Escribe tu nombre completo.');
+  if (!v('num') && !v('curp')) errores.push('Indica tu número de afiliación o tu CURP.');
+  if (v('tel').replace(/\D/g, '').length < 10) errores.push('Escribe un teléfono de 10 dígitos.');
+  if (!v('periodo')) errores.push('Indica el mes o período.');
+  if (!(Number(v('monto')) > 0)) errores.push('Indica el monto pagado.');
+  if (!v('fecha')) errores.push('Indica la fecha de la operación.');
+  const f = $('#archivo').files[0]; const ea = validarArchivo(f); if (ea) errores.push('Comprobante: ' + ea);
+  const caja = $('#errores'); if (errores.length) { caja.classList.remove('oculto'); caja.innerHTML = '<ul>' + errores.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>'; return; } caja.classList.add('oculto');
+  const btn = $('#enviar'); ocupado(btn, true, 'Registrando…');
+  try {
+    const clave = (v('curp') || 'num-' + v('num')).replace(/[^A-Z0-9-]/gi, ''); const ext = (f.name.split('.').pop() || 'pdf').toLowerCase();
+    const ruta = `pagos/${clave}/${Date.now()}.${ext}`; await subirArchivo(ruta, f);
+    const { data, error } = await sb.rpc('registrar_pago_publico', { p_nombre: v('nombre'), p_numero_afiliacion: v('num') ? Number(v('num')) : null, p_curp: v('curp') || null, p_telefono: v('tel'), p_periodo: v('periodo'), p_monto: Number(v('monto')), p_fecha: v('fecha'), p_comprobante_url: ruta, p_comprobante_nombre: f.name });
+    if (error) throw error;
+    $('#forma').classList.add('oculto');
+    $('#resultado').innerHTML = `<div class="tarjeta"><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--verde)">Pago registrado</p><h2>Gracias, ${esc(v('nombre').split(' ')[0])}</h2><p>Recibimos tu registro del pago de <b>${dinero(v('monto'))}</b> del período <b>${esc(v('periodo'))}</b>, con fecha ${fechaLarga(v('fecha'))}. ${data && data[0] && data[0].ligado ? 'Quedó ligado a tu registro en el Padrón.' : 'Quedó ligado a tu folio o CURP; se asociará a tu número de afiliación cuando se ejecute tu alta.'}</p><p>La Secretaría de Finanzas verificará la operación bancaria, registrará el pago en el padrón financiero y emitirá tu comprobante, que te llegará por correo.</p><p class="small muted">${CFG.CLAUSULA_PIE}</p></div>`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (err) { ocupado(btn, false); toast('No se pudo registrar: ' + (err.message || err), 'error'); }
+};
+</script>
+</body>
+</html>

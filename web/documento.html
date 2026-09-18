@@ -15,77 +15,242 @@
 <div id="doc"><p class="cargando" style="text-align:center">Preparando documento…</p></div>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, esc, param, armazon, requerirRol, fecha, fechaLarga, hoy, DOCS, DOC_CORTO, ROOT, CFG } from './assets/app.js';
-const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg']); if (!p) throw new Error('sin acceso');
+import { sb, $, esc, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, dinero, DOCS, DOC_CORTO, docsRequeridos, ROOT, CFG } from './assets/app.js';
+const tipo = param('tipo'), id = param('id'), f = param('f'), c = param('c'); const doc = $('#doc');
+const publico = ['solicitud', 'cedula'].includes(tipo) && f && c;
+let p = null;
+if (!publico) { p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas']); if (!p) throw new Error('sin acceso'); }
 await armazon({ titulo: 'Documento' });
-const tipo = param('tipo'), id = param('id'); const doc = $('#doc');
-const membrete = (titulo) => `<div class="membrete"><img src="${ROOT}assets/sitad-logo-full.png" alt="SITAD"><div><b>${CFG.SINDICATO}</b><span>${CFG.SECRETARIA}</span><span class="lema">${CFG.LEMA}</span></div></div><h1>${titulo}</h1>`;
-const pie = (formato) => `<div class="pie-doc">${formato} · Secretaría de Organización del Comité Ejecutivo Nacional · Versión 1.0 (septiembre 2026). ${CFG.CLAUSULA_PIE}<br>${CFG.DOMICILIO}</div>`;
-const SI = (b) => b ? '☒ Sí ☐ No' : '☐ Sí ☒ No';
 
-if (tipo === 'dictamen' || tipo === 'prevencion') {
-  const [{ data: s }, { data: docs }] = await Promise.all([sb.from('v_solicitudes').select('*').eq('id', id).single(), sb.from('solicitud_documentos').select('tipo, validado, nombre_archivo').eq('solicitud_id', id)]);
-  if (!s) { doc.innerHTML = '<div class="aviso error">No se encontró la solicitud.</div>'; }
-  else if (tipo === 'dictamen') {
-    const tiene = t => (docs || []).some(d => d.tipo === t);
-    doc.innerHTML = `<div class="documento">${membrete('Dictamen de solicitud de afiliación')}
-      <p><b>Folio de la solicitud:</b> ${esc(s.folio)} · <b>Fecha del dictamen:</b> ${fecha(s.fecha_dictamen || hoy())} · <b>Sección que remite:</b> ${esc(s.seccion)}</p>
-      <h2>1. Datos de la persona solicitante</h2>
-      <table><tr><th style="width:42%">Nombre completo</th><td>${esc(s.nombre_completo)}</td></tr><tr><th>Centro de trabajo o adscripción</th><td>${esc(s.centro_trabajo || '')} · ${esc(s.puesto || '')}</td></tr><tr><th>Datos de contacto</th><td>${esc(s.correo)} · ${esc(s.telefono || '')}</td></tr><tr><th>Fecha de recepción de la solicitud</th><td>${fecha(s.fecha_recepcion)}</td></tr><tr><th>Fecha límite para dictaminar (10 días hábiles)</th><td>${fecha(s.limite_dictamen)}</td></tr><tr><th>Prevención formulada</th><td>${s.fecha_prevencion ? `☒ Sí, el ${fecha(s.fecha_prevencion)}; subsanada el ${fecha(s.fecha_subsanacion)}` : '☒ No'}</td></tr></table>
-      <h2>2. Verificación de requisitos</h2>
-      <table><tr><th>№</th><th>Requisito</th><th>Cumple</th><th>Documento o constancia</th></tr>
-        <tr><td>1</td><td>Es trabajador en activo de la Empresa</td><td>${SI(s.es_trabajador_activo && s.sentido !== 'Desfavorable')}</td><td>Declaración bajo protesta en la solicitud; datos de la relación de trabajo</td></tr>
-        <tr><td>2</td><td>Presentó solicitud por escrito o por el medio institucional habilitado, con nombre, datos de contacto y centro de trabajo o adscripción</td><td>${SI(true)}</td><td>${s.canal === 'publico' ? 'Medio institucional habilitado (plataforma)' : 'Solicitud escrita recibida por la Sección'} · ${tiene('solicitud_afiliacion_firmada') ? 'AF-01 firmada' : 'AF-01 pendiente'}</td></tr>
-        <tr><td>3</td><td>Manifestó expresamente la aceptación y cumplimiento del Estatuto</td><td>${SI(s.acepta_estatuto)}</td><td>Manifestación del ${fecha(s.acepta_estatuto_at)}</td></tr>
-        <tr><td>4</td><td>No tiene la calidad de trabajador de confianza legalmente excluido de la organización de los demás trabajadores</td><td>${SI(!s.es_confianza)}</td><td>Declaración en la solicitud; puesto declarado</td></tr></table>
-      <p class="small">Expediente: ${DOCS.map(d => (tiene(d.tipo) ? '☒ ' : '☐ ') + d.corto).join(' · ')}. No se exigen requisitos de afiliación distintos de los establecidos en el Estatuto.</p>
-      <h2>3. Dictamen</h2>
-      <p>${s.sentido === 'Favorable' ? '☒' : '☐'} <b>FAVORABLE.</b> La solicitud cumple los requisitos estatutarios. Se remite a la Secretaría General para que autorice el alta en el Padrón de Afiliados y se expida la credencial correspondiente. La persona quedará adscrita a la ${esc(s.seccion)}.</p>
-      <p>${s.sentido === 'Desfavorable' ? '☒' : '☐'} <b>DESFAVORABLE.</b> ${s.sentido === 'Desfavorable' ? 'La solicitud no cumple el requisito señalado, por las razones siguientes: ' + esc(s.motivo_desfavorable || '') : 'La solicitud no cumple el requisito señalado en el numeral ____ del apartado 2.'}</p>
-      <h2>4. Seguimiento (uso interno)</h2>
-      <table><tr><th style="width:60%">Remisión a la Secretaría General</th><td>${fecha(s.fecha_envio_sg)}</td></tr><tr><th>Autorización del Secretario General</th><td>${fecha(s.fecha_autorizacion_sg)}${s.autorizacion_sg_ref ? ' · ' + esc(s.autorizacion_sg_ref) : ''}</td></tr><tr><th>Límite para ejecutar en el Padrón (2 días hábiles)</th><td>${fecha(s.limite_ejecucion)}</td></tr><tr><th>Ejecución en el Padrón y apertura de expediente</th><td>${fecha(s.fecha_ejecucion_padron)}</td></tr><tr><th>Aviso a la Sección</th><td></td></tr></table>
-      <div class="firmas"><div>Titular de la Secretaría de Organización</div><div>Recibió — Secretaría General</div></div>
-      ${pie('Formato FT-001')}</div>`;
-  } else {
-    const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCION\]/.exec(s.notas || ''); const puntos = m ? m[1].trim().split('\n').filter(Boolean) : [];
-    doc.innerHTML = `<div class="documento">${membrete('Prevención de solicitud de afiliación')}
-      <p><b>Folio:</b> ${esc(s.folio)} · <b>Fecha:</b> ${fecha(s.fecha_prevencion)} · <b>Lugar:</b> ${CFG.LUGAR_EXPEDICION}</p>
-      <p><b>C. ${esc(s.nombre_completo.toUpperCase())}</b><br><b>Presente.</b></p>
-      <p>La Secretaría de Organización del Comité Ejecutivo Nacional del ${CFG.SINDICATO} recibió su solicitud de afiliación el ${fecha(s.fecha_recepcion)}. De su revisión se advierte que está incompleta en lo siguiente:</p>
-      <table><tr><th>№</th><th>Elemento faltante o por aclarar</th><th>Cómo subsanarlo</th></tr>${(puntos.length ? puntos : ['(sin detalle)']).map((x, i) => { const [a, b] = x.split(/;(.+)/); return `<tr><td>${i + 1}</td><td>${esc(a)}</td><td>${esc(b || 'Remítalo por el medio institucional indicando su folio.')}</td></tr>`; }).join('')}</table>
-      <p>Por lo anterior, y por una sola vez, se le previene para que <b>dentro de los diez días hábiles siguientes</b> a la recepción de este escrito, es decir, a más tardar el <b>${fecha(s.limite_subsanacion)}</b>, presente lo indicado por el medio siguiente: la plataforma de la Secretaría (${ROOT}estado/, con su folio y su correo) o el correo ${CFG.CORREO_ORGANIZACION}.</p>
-      <p>Recibida la subsanación, el plazo para emitir el dictamen se reanudará por los días hábiles que quedaron pendientes. Si la prevención no se atiende en tiempo, la solicitud se dictaminará con los elementos disponibles.</p>
-      <p>Para cualquier duda puede comunicarse con la Secretaría de Organización de su Sección o con esta Secretaría por el canal institucional indicado arriba.</p>
-      <div class="firmas"><div>Titular de la Secretaría de Organización del CEN</div><div>Acuse de recibo (nombre, fecha y firma)</div></div>
-      ${pie('Formato FT-002')}</div>`;
-  }
-} else if (tipo === 'constancia' || tipo === 'credencial') {
-  const { data: x } = await sb.from('v_padron').select('*').eq('id', id).single();
-  if (!x) { doc.innerHTML = '<div class="aviso error">No se encontró el registro del padrón.</div>'; }
-  else {
-    const { data: s } = x.solicitud_id ? await sb.from('solicitudes_afiliacion').select('fecha_recepcion').eq('id', x.solicitud_id).single() : { data: null };
-    const urlVerif = `${location.origin}${ROOT.replace(location.origin, '')}verificar/?t=${x.credencial_qr_token}`;
-    if (tipo === 'constancia') {
-      doc.innerHTML = `<div class="documento">${membrete('Constancia de Registro de Afiliación')}
-        <p><b>Número de constancia:</b> ${esc(x.folio)} · <b>Número de afiliación (Padrón):</b> ${x.numero_afiliacion}</p>
-        <h2>Constancia</h2>
-        <p>La Secretaría de Organización del Comité Ejecutivo Nacional hace constar que, con la autorización del Secretario General de fecha ${fecha(x.fecha_autorizacion_sg)}, la persona cuyos datos se describen a continuación <b>quedó registrada en el Padrón de Afiliados</b> del Sindicato, con adscripción a la Sección Sindical que se indica.</p>
-        <table><tr><th style="width:42%">Nombre de la persona afiliada</th><td>${esc(x.nombre_completo)}</td></tr><tr><th>Actividad o puesto</th><td>${esc(x.puesto || '')}</td></tr><tr><th>Empresa</th><td>REEDCAM</td></tr><tr><th>Sección Sindical de adscripción</th><td>${esc(x.seccion)}</td></tr><tr><th>Fecha de recepción de la solicitud</th><td>${fecha(s && s.fecha_recepcion)}</td></tr><tr><th>Fecha del dictamen favorable</th><td>${fecha(x.fecha_dictamen)}</td></tr><tr><th>Fecha de alta en el Padrón</th><td>${fecha(x.fecha_alta)}</td></tr></table>
-        <h2>Información para la persona afiliada</h2>
-        <ul><li>Sus derechos y obligaciones como persona afiliada son los que establece el Estatuto del Sindicato; su cumplimiento y ejercicio se realizan a través de su Sección Sindical y de los órganos nacionales.</li><li>Su credencial es el documento con el que acredita su calidad de persona afiliada ante el Sindicato y en sus asambleas.</li><li>Conozca los Documentos Básicos del Sindicato (Declaración de Principios, Programa de Acción y Estatuto) en la liga o código de esta constancia.</li><li>La cuota sindical ordinaria se cubre conforme a las indicaciones de la Secretaría de Finanzas.</li></ul>
-        <p class="small"><b>Ligas:</b> Documentos Básicos: ${CFG.LIGA_DOCUMENTOS_BASICOS || '______________________'} · Verificación de la credencial: ${esc(urlVerif)}</p>
-        <div class="firmas"><div>Titular de la Secretaría de Organización del Comité Ejecutivo Nacional</div><div style="border:0">Expedida en la Ciudad de México, el ${fechaLarga(hoy())}.</div></div>
-        ${pie('AF-05 · Paquete de Afiliación')}</div>`;
-    } else {
-      doc.innerHTML = `<div class="documento" style="max-width:520px;text-align:center">
-        <div class="credencial" style="text-align:left"><div class="banda"></div><img class="logo" src="${ROOT}assets/sitad-mark.png" alt=""><div class="tit">${CFG.SINDICATO_CORTO} · Persona afiliada</div><div class="nombre">${esc(x.nombre_completo)}</div><div class="dato">${esc(x.seccion)}</div><div class="dato small">${esc(x.puesto || '')}</div><canvas class="qr" id="qr"></canvas><div class="num">No. ${x.numero_afiliacion} · ${esc(x.folio)}<br>Alta ${fecha(x.fecha_alta)} · Verifica con el QR</div></div>
-        <p class="small muted">Verificación: ${esc(urlVerif)}<br>Clave: ${esc(x.credencial_qr_token)}</p>
-        <p class="tiny muted">${CFG.SINDICATO} · ${CFG.LEMA}</p></div>`;
-      const { toCanvas } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm');
-      toCanvas($('#qr'), urlVerif, { width: 78, margin: 0, color: { dark: '#171717' } });
-    }
-  }
-} else doc.innerHTML = '<div class="aviso error">Tipo de documento no válido.</div>';
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const partes = d => { const [a, m, dd] = String(d || hoy()).slice(0, 10).split('-'); return { d: parseInt(dd), mes: MESES[parseInt(m) - 1], a }; };
+const v = x => (x == null || x === '') ? '' : esc(x);
+const LOGO = `${ROOT}assets/sitad-logo-cuadrado.png`;
+// Membrete de los anexos del SG (tabla: logo · nombre y lema / título · caja derecha)
+const sgMembrete = (titulo, derecha) => `<div class="sg-membrete"><div class="sg-logo"><img src="${LOGO}" alt=""></div><div class="sg-centro"><b>${CFG.SINDICATO_SG}</b><i>“${CFG.LEMA}”</i><span class="sg-titulo">${titulo}</span></div><div class="sg-derecha">${derecha.map(x => `<span>${x}</span>`).join('')}</div></div>`;
+const membreteFT = (titulo) => `<div class="membrete"><img src="${ROOT}assets/sitad-logo-full.png" alt="SITAD"><div><b>${CFG.SINDICATO}</b><span>${CFG.SECRETARIA}</span><span class="lema">${CFG.LEMA}</span></div></div><h1>${titulo}</h1>`;
+const pieFT = (formato) => `<div class="pie-doc">${formato} · Secretaría de Organización del Comité Ejecutivo Nacional · Versión 1.0 (septiembre 2026). ${CFG.CLAUSULA_PIE}<br>${CFG.DOMICILIO}</div>`;
+const SI = (b) => b ? '☒ Sí ☐ No' : '☐ Sí ☒ No';
+const fila2 = (a, b) => `<tr><td style="width:50%">${a}</td><td>${b}</td></tr>`;
+const cel = (label, val) => `<b>${label}:</b> ${v(val)}`;
+
+async function datosSolicitud() {
+  if (publico) { const { data, error } = await sb.rpc('solicitud_publica_datos', { p_folio: f, p_correo: c }); if (error || !data) return null; return data; }
+  const { data } = await sb.from('v_solicitudes').select('*').eq('id', id).single(); return data;
+}
+async function config() { const { data } = await sb.from('configuracion').select('clave, valor'); return Object.fromEntries((data || []).map(x => [x.clave, x.valor])); }
+
+// ===================== Anexo 12 y 13 · Manifestación de afiliación + aviso de privacidad =====================
+function anexo12(s) {
+  const fe = partes(s.fecha_recepcion);
+  const tabla = [['NOMBRE COMPLETO', s.nombre_completo], ['CURP', s.curp], ['CALLE', s.domicilio], ['COLONIA', s.colonia], ['C.P.', s.cp], ['MUNICIPIO', s.municipio], ['ESTADO', s.estado_domicilio], ['TELEFONO CELULAR', s.telefono], ['CORREO', s.correo], ['PATRON', s.patron || 'REEDCAM']];
+  return `<div class="documento doc-sg sg-carta">
+    <p style="text-align:right">Ciudad de <u>&nbsp;${v(s.ciudad_firma || s.municipio)}&nbsp;</u>, <u>&nbsp;${v(s.estado_domicilio)}&nbsp;</u>, a ${fe.d} de ${fe.mes} de ${fe.a}.</p>
+    <p style="text-align:right"><b>ASUNTO:</b> Manifestación libre, personal,<br>voluntaria e informada de afiliación sindical</p>
+    <p><b>Sindicato de Trabajadores Digitales<br>Secretaría de Organización<br>Presente</b></p>
+    <p>Yo, <u>&nbsp;${v(s.nombre_completo)}&nbsp;</u>, mayor de edad, identificado(a) con <u>&nbsp;${v(s.identificacion_tipo || 'credencial para votar')}&nbsp;</u>, bajo protesta de decir verdad manifiesto lo siguiente:</p>
+    <h4>PRIMERO.</h4><p>Que actualmente desarrollo actividades económicas mediante plataformas digitales y/o actividades relacionadas con la prestación de servicios a través de aplicaciones tecnológicas, incluyendo de manera enunciativa mas no limitativa servicios de transporte, reparto, logística, mensajería, comercio electrónico, servicios profesionales u otras modalidades vinculadas con las actividades económicas desarrolladas mediante plataformas digitales.</p>
+    <h4>SEGUNDO.</h4><p>Que de manera libre, consciente, personal, voluntaria e informada, sin que medie presión, intimidación, engaño, promesa ilícita o cualquier forma de coacción, y con fundamento en los artículos 357 y 358, fracción I, de la Ley Federal del Trabajo, he decidido solicitar mi afiliación como integrante del <b>Sindicato de Trabajadores Digitales (SITAD).</b></p>
+    <p>Asimismo, manifiesto mi aceptación para cubrir las cuotas sindicales establecidas en los Estatutos del Sindicato y autorizo que, en los casos en que exista una relación laboral o mecanismo administrativo que lo permita, se realicen las gestiones necesarias para su retención y entrega al SITAD conforme a la legislación aplicable.</p>
+    <h4>TERCERO.</h4><p>Que reconozco que la libertad sindical constituye un derecho protegido por la Constitución Política de los Estados Unidos Mexicanos, los tratados internacionales de los que México forma parte y la Ley Federal del Trabajo, por lo que mi decisión de integrarme al SITAD deriva exclusivamente de mi voluntad personal, libre e informada.</p>
+    <div class="salto"></div>
+    <h4>CUARTO.</h4><p>Declaro haber recibido información suficiente respecto de:</p><ul><li>Los fines, objetivos y principios del SITAD.</li><li>Sus Estatutos.</li><li>Los derechos y obligaciones de las personas afiliadas.</li><li>La estructura democrática y organizativa del Sindicato.</li><li>Los procedimientos internos para la elección de sus órganos de representación.</li><li>Los mecanismos de participación, consulta y rendición de cuentas.</li></ul>
+    <h4>QUINTO.</h4><p>Manifiesto mi voluntad de respetar y cumplir los Estatutos, reglamentos, acuerdos y resoluciones emitidos válidamente por la Asamblea General y demás órganos de gobierno del SITAD, ejerciendo mis derechos sindicales con responsabilidad, buena fe y apego a los principios democráticos de la organización.</p>
+    <h4>SEXTO.</h4><p>Autorizo mi incorporación al padrón de personas afiliadas del Sindicato de Trabajadores Digitales y solicito que mi registro sea realizado conforme a los procedimientos internos establecidos por el Sindicato y la legislación laboral aplicable.</p>
+    <h4>SÉPTIMO.</h4><p>Autorizo al Sindicato de Trabajadores Digitales para recabar, resguardar y tratar mis datos personales exclusivamente para fines relacionados con:</p><ul><li>Mi registro y afiliación sindical.</li><li>La integración y administración de mi expediente sindical.</li><li>La defensa de mis derechos laborales y colectivos.</li><li>La prestación de servicios y beneficios sindicales.</li><li>La comunicación institucional.</li></ul><p>Lo anterior conforme a la legislación aplicable en materia de protección de datos personales.</p>
+    <h4>OCTAVO.</h4><p>Reconozco que mi permanencia dentro del Sindicato de Trabajadores Digitales deriva de mi libre voluntad y que podré ejercer los derechos y obligaciones que la legislación laboral y los Estatutos sindicales me reconocen.</p>
+    <div class="salto"></div>
+    <h4>NOVENO.</h4><p>Bajo protesta de decir verdad, manifiesto que la información proporcionada para efectos de mi afiliación es auténtica, corresponde a mi identidad y refleja mi voluntad de formar parte del Sindicato de Trabajadores Digitales.</p>
+    <p>Por lo anteriormente expuesto:</p>
+    <p><b>SOLICITO FORMALMENTE MI AFILIACIÓN AL SINDICATO DE TRABAJADORES DIGITALES</b></p>
+    <p>Sin otro particular, firmo el presente documento para todos los efectos legales y estatutarios a que haya lugar.</p>
+    <table class="sg" style="margin:10px 0 30px">${tabla.map(([k, val]) => `<tr><td style="width:32%"><strong>${k}:</strong></td><td>${v(val)}</td></tr>`).join('')}</table>
+    <p style="text-align:center"><b>Atentamente</b></p><br><br>
+    <div class="sg-firma">Firma de la persona solicitante</div>
+    <p class="mt-3"><b>C.c.p. Archivo</b></p>
+    <p>El presente formato deberá requisitarse por duplicado en original, anexando el aviso de privacidad correspondiente y copia de identificación oficial vigente.</p>
+    <div class="salto"></div>
+    <p style="text-align:center"><b>AVISO DE PRIVACIDAD CON CONSENTIMIENTO EXPRESO</b></p>
+    <p>El <b>Sindicato de Trabajadores Digitales (SITAD)</b>, con domicilio en ${CFG.DOMICILIO_SG}, teléfono para contacto ${CFG.TELEFONO_CONTACTO}, correo electrónico ${CFG.CORREO_FINANZAS}, es responsable del tratamiento de los datos personales que sean proporcionados por las personas afiliadas, mismos que serán protegidos conforme a lo establecido en la <b>Ley Federal de Protección de Datos Personales en Posesión de los Particulares</b> y demás disposiciones aplicables.</p>
+    <p>Los datos personales recabados serán utilizados exclusivamente para finalidades relacionadas con:</p><ul><li>El proceso de afiliación sindical.</li><li>La integración y actualización del padrón de personas afiliadas.</li><li>La administración de la relación sindical.</li><li>La comunicación institucional.</li><li>La prestación de servicios y beneficios sindicales.</li><li>El cumplimiento de obligaciones legales y estatutarias.</li></ul>
+    <p>Mediante la firma del presente documento, la persona titular manifiesta su consentimiento expreso para el tratamiento de sus datos personales conforme a las finalidades señaladas.</p>
+    <p>Asimismo, podrá ejercer sus derechos de <b>Acceso, Rectificación, Cancelación u Oposición (derechos ARCO)</b> mediante solicitud presentada ante el domicilio del Sindicato o por los medios que para tal efecto establezca la organización.</p>
+    <p class="mt-2"><b>Nombre:</b> ${v(s.nombre_completo)} · <b>Folio:</b> ${v(s.folio)}</p><br><br>
+    <div class="sg-firma">Firma de la persona solicitante</div>
+  </div>`;
+}
+
+// ===================== Anexo 23 · Cédula de afiliación =====================
+function anexo23(s) {
+  const dep = Array.isArray(s.dependientes) ? s.dependientes : [];
+  const d = i => dep[i] || {};
+  const mem = (pag) => sgMembrete('CÉDULA DE AFILIACIÓN', ['<b>ORGANIZACIÓN<br>C.E.N.</b>', '<b>ANEXO 23</b>', `Página ${pag} de 2`]);
+  return `<div class="documento doc-sg">${mem(1)}
+    <table class="sg"><tr><td style="background:#D9D9D9"><strong>TIPO DE MOVIMIENTO</strong> &nbsp;&nbsp; Alta ${s.tipo_movimiento === 'Modificación' ? '☐' : '☒'} &nbsp;&nbsp; Modificacion ${s.tipo_movimiento === 'Modificación' ? '☒' : '☐'}</td></tr></table>
+    <div class="sg-seccion">INFORMACIÓN GENERAL DEL TRABAJADOR</div>
+    <table class="sg">${fila2(cel('Fecha de Nacimiento', fecha(s.fecha_nacimiento)), cel('Estado Civil', s.estado_civil))}<tr><td colspan="2">${cel('Nombre', s.nombre_completo)}</td></tr>${fila2(cel('R.F.C.', s.rfc), cel('CURP', s.curp))}${fila2(cel('Domicilio', s.domicilio), cel('C.P.', s.cp))}<tr><td colspan="2">${cel('Colonia', s.colonia)}</td></tr>${fila2(cel('Ciudad', s.municipio), cel('Estado', s.estado_domicilio))}${fila2(cel('E-mail', s.correo), cel('Celular', s.telefono))}</table>
+    <div class="sg-seccion">SEGURIDAD SOCIAL</div>
+    <table class="sg"><tr><td colspan="2">${cel('NSS', s.nss)}</td></tr>${fila2(cel('Unidad Medica', s.unidad_medica), cel('Ciudad', s.unidad_medica_ciudad))}</table>
+    <div class="sg-seccion">SITUACIÓN PROFESIONAL</div>
+    <table class="sg">${fila2(cel('Escolaridad', s.escolaridad), `Trunca ( ${s.escolaridad_estado === 'Trunca' ? 'X' : '&nbsp;&nbsp;'} ) &nbsp;&nbsp;&nbsp; Concluida ( ${s.escolaridad_estado === 'Concluida' ? 'X' : '&nbsp;&nbsp;'} )`)}<tr><td colspan="2">${cel('Carrera', s.carrera)}</td></tr></table>
+    <div class="sg-seccion">INFORMACIÓN DE LA EMPRESA</div>
+    <table class="sg"><tr><td colspan="2">${cel('Ocupación', s.puesto)}</td></tr>${fila2(cel('Empresa', s.empresa), cel('Ingreso', fecha(s.fecha_inicio_relacion)))}${fila2(cel('Domicilio Fiscal', s.domicilio_fiscal), cel('Frecuencia', s.frecuencia_pago))}${fila2(cel('Teléfono', s.telefono_empresa), cel('Jefe Laboral', s.jefe_laboral))}</table>
+    <div class="sg-seccion">SEGURO DEL INSTRUMENTO DE TRABAJO</div>
+    <table class="sg"><tr><td colspan="2">${cel('Seguro', s.seguro_aseguradora)}</td></tr>${fila2(cel('Póliza ó No. de Afiliación', s.seguro_poliza), cel('Vigencia', s.seguro_vigencia))}</table>
+    <div class="sg-seccion">INFORMACIÓN DEL CONYUGUE</div>
+    <table class="sg"><tr><td colspan="2">${cel('Nombre', s.conyuge_nombre || 'No aplica')}</td></tr>${fila2(cel('Domicilio', s.conyuge_domicilio), cel('Teléfono', s.conyuge_telefono))}</table>
+    <div class="sg-seccion">DEPENDIENTES</div>
+    <table class="sg">${[0, 1, 2].map(i => `<tr><td colspan="2">${cel('Nombre', d(i).nombre || (i === 0 && !dep.length ? 'No aplica' : ''))}</td></tr>${fila2(cel('Parentesco', d(i).parentesco), cel('Edad', d(i).edad))}`).join('')}</table>
+    <div class="salto"></div>${mem(2)}
+    <p style="margin-top:30px">__X__ Estoy de acuerdo con el Aviso de Privacidad<br>__X__ Acepto los Estatutos y Documentos Básicos de la Organización.</p>
+    <p class="mt-3"><b>Requisitos:</b></p><ol><li>Constancia de Situación Fiscal</li><li>CURP</li><li>Identificación Oficial</li><li>Solicitud de Afiliación</li></ol>
+    <p><b><u>En caso de trabajadores del transporte de pasajeros o ultima milla,</u></b> será necesario también enviar lo siguiente:</p><ol type="a"><li>Copia de su Tarjeta de Circulación.</li><li>Copia de Póliza de Seguro.</li><li>Copia de Licencia de Manejo.</li></ol>
+    <p class="mt-3"><b>Notas:</b></p><ul><li>Todos los campos de esta solicitud son obligatorios.</li><li>Cualquier modificación a los datos señalados en el formato, deberán ser notificados a la Secretaría de Organización para la actualización de su registro.</li></ul>
+    <p class="mt-3 small"><b>Folio:</b> ${v(s.folio)} · <b>Nombre:</b> ${v(s.nombre_completo)}</p><br><br>
+    <div class="sg-firma">Firma de la persona solicitante</div>
+  </div>`;
+}
+
+// ===================== Anexo 15 · Constancia de Registro =====================
+function anexo15(x, s, cfg) {
+  const enConst = !!x.asamblea_fecha_hora; const fe = partes(hoy()); const hora = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Mexico_City' });
+  const registro = x.created_at ? new Date(x.created_at).toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'short', timeStyle: 'short' }) : fecha(x.fecha_alta);
+  const secLabel = x.seccion_numero ? `Sección ${x.seccion_numero}` : x.seccion;
+  return `<div class="documento doc-sg">${sgMembrete(enConst ? 'ASAMBLEA CONSTITUTIVA' : 'CONSTANCIA DE REGISTRO', ['ORGANIZACIÓN<br>C.E.N.', 'Anexo 15', 'Página 1 de 1'])}
+    <p style="text-align:right">Número de Constancia Registro: <b><u>&nbsp;${v(x.folio)}&nbsp;</u></b></p>
+    <p style="font-size:14pt;font-weight:700;margin:24px 0 6px">${v(x.nombre_completo).toUpperCase()}</p>
+    <p>Trabajador Digital</p>
+    <p style="text-align:justify">La secretaria de organización, emite la presente <b>CONSTANCIA de REGISTRO</b> ${enConst ? `a los Trabajadores Digitales que participarán en la Asamblea Constitutiva de la ${secLabel} de Trabajadores Digitales.` : `a la persona trabajadora digital registrada en el Padrón de Afiliados del Sindicato, con adscripción a la ${v(x.seccion)}, con la autorización del Secretario General de fecha ${fecha(x.fecha_autorizacion_sg)}.`}</p>
+    <p>Los datos del trabajador registrado se describen a continuación:</p>
+    <table class="sg"><tr><td style="width:32%"><strong>Nombre del Trabajador:</strong></td><td>${v(x.nombre_completo)}</td></tr><tr><td><strong>Cargo:</strong></td><td>${v(x.puesto)}</td></tr><tr><td><strong>Patron:</strong></td><td>${v(x.patron || 'REEDCAM')}</td></tr><tr><td><strong>Fecha y Hora de Registro:</strong></td><td>${registro} · Número de afiliación ${x.numero_afiliacion}</td></tr></table>
+    ${enConst ? `<p style="text-align:center;font-size:13pt;font-weight:700;margin:22px 0 10px">INFORMACIÓN PARA LA ASAMBLEA</p>
+    <div class="sg-caja"><ul style="margin:0;padding-left:18px;line-height:1.7">
+      <li>Para su ingreso deberá portar su gafete expedido por el Comité de Organización, Identificación Oficial, y exhibir su perfil de trabajador digital.</li>
+      <li>Fecha, Hora y lugar de la Asamblea Constituyente: <b>${esc(fechaHoraLarga(x.asamblea_fecha_hora)).toUpperCase()}</b></li>
+      <li>Dirección: <b>${v(x.asamblea_direccion)}</b></li>
+      <li><b>Esperemos contar con su valiosa presencia.</b></li>
+      <li>Se solicita llegar con una horas de anticipación para su acreditación y registro de asistencia.</li>
+      <li>Conozca el contenido de los documentos básicos en la siguiente liga digital:<br><a href="${esc(cfg.liga_documentos_basicos || CFG.LIGA_DOCUMENTOS_BASICOS)}">${esc(cfg.liga_documentos_basicos || CFG.LIGA_DOCUMENTOS_BASICOS)}</a></li>
+      <li>Para más información, consulte las bases de la convocatoria en la siguiente liga digital:<br>${x.convocatoria_url ? `<a href="${esc(x.convocatoria_url)}">${esc(x.convocatoria_url)}</a>` : '<i>(la Sección la comparte con la convocatoria)</i>'}</li></ul></div>` :
+    `<div class="sg-caja"><ul style="margin:0;padding-left:18px;line-height:1.7"><li>Su credencial es el documento con el que acredita su calidad de persona afiliada ante el Sindicato y en sus asambleas.</li><li>Conozca el contenido de los documentos básicos en la siguiente liga digital:<br><a href="${esc(cfg.liga_documentos_basicos || CFG.LIGA_DOCUMENTOS_BASICOS)}">${esc(cfg.liga_documentos_basicos || CFG.LIGA_DOCUMENTOS_BASICOS)}</a></li><li>La cuota sindical ordinaria se cubre conforme a las indicaciones de la Secretaría de Finanzas.</li></ul></div>`}
+    <p style="text-align:right;margin-top:36px"><b>Expedido por la Secretaria de Organización<br>En la Ciudad de México, ${fe.d} DE ${fe.mes.toUpperCase()} DEL ${fe.a} | ${hora} hrs</b></p>
+  </div>`;
+}
+
+// ===================== Anexo 14 · Gafete =====================
+async function anexo14(x, cfg) {
+  const liga = cfg.liga_documentos_basicos || CFG.LIGA_DOCUMENTOS_BASICOS;
+  const evento = x.asamblea_fecha_hora ? `ASAMBLEA CONSTITUTIVA<br>${x.seccion_numero ? 'SECCIÓN ' + x.seccion_numero + ' · ' : ''}${esc(x.seccion.replace('Sección ', '')).toUpperCase()}` : `PERSONA AFILIADA<br>${esc(x.seccion).toUpperCase()}`;
+  const marca = `<div class="marca"><img src="${ROOT}assets/sitad-mark.png" alt=""><div><b>SITAD</b><span>SINDICATO DE TRABAJADORES DIGITALES</span></div></div>`;
+  doc.innerHTML = `<div class="gafete">
+    <div class="panel tl">${marca}<div class="evento">${evento}</div><p class="nombre">${v(x.nombre_completo).toUpperCase()}</p><p class="numero">NÚMERO DE AFILIACIÓN ${x.numero_afiliacion}</p><p class="small muted centrado">${v(x.folio)}</p></div>
+    <div class="panel tr">${marca}<p class="qr-titulo">Escanea el código para ver<br>los documentos básicos</p><div class="qr-marco"><canvas id="qr"></canvas></div></div>
+    <div class="banda">No olvides leer los documentos con anticipación.</div>
+    <div class="panel bl">${marca}<p class="bienvenida">Bienvenido(a) a la ${x.asamblea_fecha_hora ? 'Asamblea Constitutiva' : 'familia SITAD'}</p><ul class="puntos"><li>${x.asamblea_fecha_hora ? 'Descarga tu gafete y accede a la Asamblea Constitutiva.' : 'Descarga tu gafete y preséntalo en las asambleas de tu Sección.'}</li><li>No dejes pasar esta oportunidad única de ser parte de este nuevo cambio.</li><li>Escanea el código QR y lee los documentos básicos.</li></ul>${x.asamblea_fecha_hora ? `<p class="small mt-2"><b>${esc(fechaHoraLarga(x.asamblea_fecha_hora))}</b><br>${v(x.asamblea_direccion)}</p>` : ''}</div>
+    <div class="panel br"><div class="imprime">IMPRIME TU GAFETE CON ANTICIPACIÓN PARA INGRESAR DIRECTO AL ÁREA DEL EVENTO</div><ol class="pasos"><li>Imprime tu gafete en una hoja tamaño carta y dobla por la mitad dejando tu información en la cara externa.</li><li>Dobla nuevamente la hoja dejando una sola cara de frente.</li><li>Presenta este gafete en la entrada del salón del evento.</li></ol></div>
+  </div>`;
+  const { toCanvas } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm');
+  toCanvas($('#qr'), liga, { width: 160, margin: 0, color: { dark: '#171717' } });
+}
+
+// ===================== AF-09 · Carta de Finanzas =====================
+function cartaFinanzas(x, cfg) {
+  const fe = partes(hoy());
+  return `<div class="documento doc-sg sg-carta">${sgMembrete('SOLICITUD DE APORTACIÓN DE CUOTA SINDICAL', ['SECRETARÍA DE<br>FINANZAS', '', 'Página 1 de 1'])}
+    <p style="text-align:right;margin-top:20px">Ciudad de México, a ${fe.d} de ${fe.mes} de ${fe.a}.</p>
+    <p style="text-align:right">Asunto: Invitación para realizar el pago de cuota sindical.</p>
+    <p><b>C. ${v(x.nombre_completo).toUpperCase()}<br>DEL SINDICATO DE TRABAJADORES DIGITALES.</b></p><p><b>Presente.</b></p>
+    <p>La Secretaría de Finanzas del Sindicato de Trabajadores Digitales (SITAD), con fundamento en los Estatutos que rigen la vida interna de nuestra organización sindical, le extiende una cordial invitación para realizar el pago de su cuota sindical, misma que constituye una aportación destinada al fortalecimiento de las actividades, servicios, programas y representación que el Sindicato brinda en beneficio de todos sus afiliados.</p>
+    <p>Para tal efecto, el pago deberá realizarse mediante depósito o transferencia electrónica a la siguiente cuenta bancaria oficial del Sindicato:</p>
+    <p><b>Institución Bancaria: ${v(cfg.banco_institucion)}<br>Titular de la Cuenta: ${v(cfg.banco_titular)}<br>Número de Cuenta: ${v(cfg.banco_cuenta)}<br>CLABE Interbancaria: ${v(cfg.banco_clabe)}<br>Monto de la Cuota: ${dinero(cfg.cuota_monto)} mxn</b></p>
+    <p>Al momento de efectuar el depósito o transferencia, deberá capturar en el apartado "Concepto", ”Referencia" o "Descripción" (según lo permita su institución bancaria) la siguiente información:</p>
+    <p><b>Nombre completo + Número de Sección</b></p>
+    <p><b>Ejemplo: ${v(x.nombre_completo).toUpperCase()} – ${x.seccion_numero ? 'SECCIÓN ' + x.seccion_numero : v(x.seccion).toUpperCase()}</b></p>
+    <p>Una vez realizado el pago, deberá enviar el comprobante bancario al correo electrónico oficial de la Secretaría de Finanzas:</p>
+    <p>Correo electrónico: <a href="mailto:${v(cfg.correo_finanzas)}">${v(cfg.correo_finanzas)}</a> — o registrarlo directamente en ${ROOT}pagos/</p>
+    <p>El asunto del correo deberá contener el siguiente formato:</p>
+    <p>Comprobante de Pago de Cuota Sindical – ${v(x.nombre_completo)} – ${x.numero_afiliacion}</p>
+    <p>En el cuerpo del correo deberá incluir la siguiente información:</p>
+    <p>1. Nombre completo.<br>2. Número de afiliación (o CURP, en caso de no contar aún con él).<br>3. Número telefónico de contacto.<br>4. Mes o período que corresponde la cuota sindical.<br>5. Monto pagado.<br>6. Fecha de la operación.<br>7. Adjuntar el comprobante bancario en formato PDF o imagen legible.</p>
+    <p>Recibida la documentación, la Secretaría de Finanzas verificará la operación bancaria y procederá a registrar el pago en el padrón financiero del Sindicato, emitiendo el comprobante correspondiente y actualizando el historial de cuotas del afiliado.</p>
+    <p>Agradecemos su puntual cumplimiento, ya que su aportación contribuye al fortalecimiento institucional y a la continuidad de los servicios, programas y acciones en favor de todas las personas afiliadas.</p>
+    <p>Sin otro particular, reciba un cordial saludo.</p>
+    <p style="text-align:center;margin-top:26px"><b>ATENTAMENTE</b><br><br><b>“${CFG.LEMA}”<br>SINDICATO DE TRABAJADORES DIGITALES</b><br><br><br><b>${v(cfg.finanzas_titular).toUpperCase()}<br>SECRETARIA DE FINANZAS<br>COMITÉ EJECUTIVO NACIONAL</b></p>
+    <p class="small muted">Número de afiliación ${x.numero_afiliacion} · Folio ${v(x.folio)} · ${v(x.seccion)}</p>
+  </div>`;
+}
+
+// ===================== Comprobante de pago de cuota (Módulo 5) =====================
+function comprobantePago(pg, cfg) {
+  return `<div class="documento doc-sg sg-carta">${sgMembrete('COMPROBANTE DE PAGO DE CUOTA SINDICAL', ['SECRETARÍA DE<br>FINANZAS', `<b>${v(pg.comprobante_folio || 'SIN VERIFICAR')}</b>`, 'Página 1 de 1'])}
+    <p style="text-align:right;margin-top:20px">Ciudad de México, a ${fechaLarga(pg.verificado_at ? String(pg.verificado_at).slice(0, 10) : hoy())}.</p>
+    <p>La Secretaría de Finanzas del Sindicato de Trabajadores Digitales (SITAD) hace constar que recibió y verificó el pago de cuota sindical que se describe a continuación, y que quedó registrado en el padrón financiero del Sindicato:</p>
+    <table class="sg" style="margin:10px 0 20px"><tr><td style="width:36%"><strong>Persona afiliada</strong></td><td>${v(pg.nombre)}</td></tr><tr><td><strong>Número de afiliación / CURP</strong></td><td>${v(pg.numero_afiliacion || '—')} / ${v(pg.curp || '—')}</td></tr><tr><td><strong>Sección</strong></td><td>${v(pg.seccion || '—')}</td></tr><tr><td><strong>Periodo</strong></td><td>${v(pg.periodo)}</td></tr><tr><td><strong>Monto</strong></td><td>${dinero(pg.monto)}</td></tr><tr><td><strong>Fecha de la operación bancaria</strong></td><td>${fecha(pg.fecha_operacion)}</td></tr><tr><td><strong>Estado</strong></td><td>${v(pg.estado)}${pg.observacion ? ' · ' + v(pg.observacion) : ''}</td></tr><tr><td><strong>Número de comprobante</strong></td><td>${v(pg.comprobante_folio || 'Se asigna al verificar')}</td></tr></table>
+    <p style="text-align:center;margin-top:30px"><b>ATENTAMENTE</b><br><br><b>${v(cfg.finanzas_titular || '').toUpperCase()}<br>SECRETARIA DE FINANZAS<br>COMITÉ EJECUTIVO NACIONAL</b></p>
+    <p class="small muted">${CFG.CLAUSULA_PIE}</p></div>`;
+}
+
+// ===================== FT-001 y FT-002 (formatos internos de la Secretaría) =====================
+function ft001(s, docs) {
+  const tiene = t => (docs || []).some(d => d.tipo === t); const req = docsRequeridos(s.actividad_transporte);
+  return `<div class="documento">${membreteFT('Dictamen de solicitud de afiliación')}
+    <p><b>Folio de la solicitud:</b> ${v(s.folio)} · <b>Fecha del dictamen:</b> ${fecha(s.fecha_dictamen || hoy())} · <b>Sección que remite:</b> ${v(s.seccion)}</p>
+    <h2>1. Datos de la persona solicitante</h2>
+    <table><tr><th style="width:42%">Nombre completo</th><td>${v(s.nombre_completo)}</td></tr><tr><th>Centro de trabajo o adscripción</th><td>${v(s.centro_trabajo)} · ${v(s.puesto)}</td></tr><tr><th>Datos de contacto</th><td>${v(s.correo)} · ${v(s.telefono)}</td></tr><tr><th>Fecha de recepción de la solicitud</th><td>${fecha(s.fecha_recepcion)}</td></tr><tr><th>Fecha límite para dictaminar (10 días hábiles)</th><td>${fecha(s.limite_dictamen)}</td></tr><tr><th>Prevención formulada</th><td>${s.fecha_prevencion ? `☒ Sí, el ${fecha(s.fecha_prevencion)}; subsanada el ${fecha(s.fecha_subsanacion)}` : '☒ No'}</td></tr></table>
+    <h2>2. Verificación de requisitos</h2>
+    <table><tr><th>№</th><th>Requisito</th><th>Cumple</th><th>Documento o constancia</th></tr>
+      <tr><td>1</td><td>Es trabajador en activo de la Empresa</td><td>${SI(s.es_trabajador_activo && s.sentido !== 'Desfavorable')}</td><td>Campo "Patrón" de la solicitud (${v(s.patron)}) e Información de la empresa de la cédula</td></tr>
+      <tr><td>2</td><td>Presentó solicitud por escrito o por el medio institucional habilitado, con nombre, datos de contacto y centro de trabajo o adscripción</td><td>${SI(true)}</td><td>${s.canal === 'publico' ? 'Medio institucional habilitado (plataforma)' : 'Recibida por la Sección'} · ${tiene('solicitud') ? 'Anexo 12-13 firmado' : 'Anexo 12-13 pendiente'} · ${tiene('cedula') ? 'Anexo 23 firmado' : 'Anexo 23 pendiente'}</td></tr>
+      <tr><td>3</td><td>Manifestó expresamente la aceptación y cumplimiento del Estatuto</td><td>${SI(s.acepta_estatuto)}</td><td>Cláusula QUINTO de la manifestación y casilla de la cédula (${fecha(s.acepta_estatuto_at)})</td></tr>
+      <tr><td>4</td><td>No tiene la calidad de trabajador de confianza legalmente excluido de la organización de los demás trabajadores</td><td>${SI(!s.es_confianza)}</td><td>Ocupación declarada: ${v(s.puesto)}</td></tr></table>
+    <p class="small">Expediente: ${req.map(d => (tiene(d.tipo) ? '☒ ' : '☐ ') + d.corto).join(' · ')}. No se exigen requisitos de afiliación distintos de los establecidos en el Estatuto.</p>
+    <h2>3. Dictamen</h2>
+    <p>${s.sentido === 'Favorable' ? '☒' : '☐'} <b>FAVORABLE.</b> La solicitud cumple los requisitos estatutarios. Se remite a la Secretaría General para que autorice el alta en el Padrón de Afiliados y se expida la credencial correspondiente. La persona quedará adscrita a la ${v(s.seccion)}.</p>
+    <p>${s.sentido === 'Desfavorable' ? '☒' : '☐'} <b>DESFAVORABLE.</b> ${s.sentido === 'Desfavorable' ? 'La solicitud no cumple el requisito señalado, por las razones siguientes: ' + v(s.motivo_desfavorable) : 'La solicitud no cumple el requisito señalado en el numeral ____ del apartado 2.'}</p>
+    <h2>4. Seguimiento (uso interno)</h2>
+    <table><tr><th style="width:60%">Remisión a la Secretaría General</th><td>${fecha(s.fecha_envio_sg)}</td></tr><tr><th>Autorización del Secretario General</th><td>${fecha(s.fecha_autorizacion_sg)}${s.autorizacion_sg_ref ? ' · ' + v(s.autorizacion_sg_ref) : ''}</td></tr><tr><th>Límite para ejecutar en el Padrón (2 días hábiles)</th><td>${fecha(s.limite_ejecucion)}</td></tr><tr><th>Ejecución en el Padrón y apertura de expediente</th><td>${fecha(s.fecha_ejecucion_padron)}</td></tr><tr><th>Aviso a la Sección</th><td></td></tr></table>
+    <div class="firmas"><div>Titular de la Secretaría de Organización</div><div>Recibió — Secretaría General</div></div>${pieFT('Formato FT-001')}</div>`;
+}
+function ft002(s) {
+  const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCION\]/.exec(s.notas || ''); const puntos = m ? m[1].trim().split('\n').filter(Boolean) : [];
+  return `<div class="documento">${membreteFT('Prevención de solicitud de afiliación')}
+    <p><b>Folio:</b> ${v(s.folio)} · <b>Fecha:</b> ${fecha(s.fecha_prevencion)} · <b>Lugar:</b> ${CFG.LUGAR_EXPEDICION}</p>
+    <p><b>C. ${v(s.nombre_completo).toUpperCase()}</b><br><b>Presente.</b></p>
+    <p>La Secretaría de Organización del Comité Ejecutivo Nacional del ${CFG.SINDICATO} recibió su solicitud de afiliación el ${fecha(s.fecha_recepcion)}. De su revisión se advierte que está incompleta en lo siguiente:</p>
+    <table><tr><th>№</th><th>Elemento faltante o por aclarar</th><th>Cómo subsanarlo</th></tr>${(puntos.length ? puntos : ['(sin detalle)']).map((x, i) => { const [a, b] = x.split(/;(.+)/); return `<tr><td>${i + 1}</td><td>${esc(a)}</td><td>${esc(b || 'Remítalo por el medio institucional indicando su folio.')}</td></tr>`; }).join('')}</table>
+    <p>Por lo anterior, y por una sola vez, se le previene para que <b>dentro de los diez días hábiles siguientes</b> a la recepción de este escrito, es decir, a más tardar el <b>${fecha(s.limite_subsanacion)}</b>, presente lo indicado por el medio siguiente: la plataforma de la Secretaría (${ROOT}estado/, con su folio y su correo) o el correo ${CFG.CORREO_ORGANIZACION}.</p>
+    <p>Recibida la subsanación, el plazo para emitir el dictamen se reanudará por los días hábiles que quedaron pendientes. Si la prevención no se atiende en tiempo, la solicitud se dictaminará con los elementos disponibles.</p>
+    <p>Para cualquier duda puede comunicarse con la Secretaría de Organización de su Sección o con esta Secretaría por el canal institucional indicado arriba.</p>
+    <div class="firmas"><div>Titular de la Secretaría de Organización del CEN</div><div>Acuse de recibo (nombre, fecha y firma)</div></div>${pieFT('Formato FT-002')}</div>`;
+}
+function credencial(x) {
+  const urlVerif = `${ROOT}verificar/?t=${x.credencial_qr_token}`;
+  doc.innerHTML = `<div class="documento" style="max-width:520px;text-align:center">
+    <div class="credencial" style="text-align:left"><div class="banda"></div><img class="logo" src="${ROOT}assets/sitad-mark.png" alt=""><div class="tit">${CFG.SINDICATO_CORTO} · Persona afiliada</div><div class="nombre">${v(x.nombre_completo)}</div><div class="dato">${v(x.seccion)}</div><div class="dato small">${v(x.puesto)}</div><canvas class="qr" id="qr"></canvas><div class="num">No. ${x.numero_afiliacion} · ${v(x.folio)}<br>Alta ${fecha(x.fecha_alta)} · Verifica con el QR</div></div>
+    <p class="small muted">Verificación: ${esc(urlVerif)}<br>Clave: ${v(x.credencial_qr_token)}</p><p class="tiny muted">${CFG.SINDICATO} · ${CFG.LEMA}</p></div>`;
+  return urlVerif;
+}
+
+// ===================== Despacho =====================
+try {
+  if (tipo === 'solicitud' || tipo === 'cedula' || tipo === 'dictamen' || tipo === 'prevencion') {
+    const s = await datosSolicitud();
+    if (!s) doc.innerHTML = '<div class="aviso error" style="max-width:700px;margin:2rem auto">No se encontró la solicitud. Revisa el folio y el correo.</div>';
+    else if (tipo === 'solicitud') doc.innerHTML = anexo12(s);
+    else if (tipo === 'cedula') doc.innerHTML = anexo23(s);
+    else { const { data: docs } = await sb.from('solicitud_documentos').select('tipo').eq('solicitud_id', s.id); doc.innerHTML = tipo === 'dictamen' ? ft001(s, docs) : ft002(s); }
+  } else if (['constancia', 'gafete', 'finanzas', 'credencial'].includes(tipo)) {
+    const [{ data: x }, cfg] = await Promise.all([sb.from('v_padron').select('*').eq('id', id).single(), config()]);
+    if (!x) doc.innerHTML = '<div class="aviso error">No se encontró el registro del padrón.</div>';
+    else if (tipo === 'constancia') doc.innerHTML = anexo15(x, null, cfg);
+    else if (tipo === 'gafete') await anexo14(x, cfg);
+    else if (tipo === 'finanzas') doc.innerHTML = cartaFinanzas(x, cfg);
+    else { const u = credencial(x); const { toCanvas } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm'); toCanvas($('#qr'), u, { width: 78, margin: 0, color: { dark: '#171717' } }); }
+  } else if (tipo === 'comprobante') {
+    const [{ data: pg }, cfg] = await Promise.all([sb.from('v_pagos').select('*').eq('id', id).single(), config()]);
+    doc.innerHTML = pg ? comprobantePago(pg, cfg) : '<div class="aviso error">No se encontró el pago.</div>';
+  } else doc.innerHTML = '<div class="aviso error">Tipo de documento no válido.</div>';
+} catch (e) { doc.innerHTML = `<div class="aviso error" style="max-width:700px;margin:2rem auto">No se pudo preparar el documento: ${esc(e.message || e)}</div>`; }
 </script>
 </body>
 </html>

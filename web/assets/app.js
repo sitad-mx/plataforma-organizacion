@@ -29,15 +29,26 @@ export function hoy() { const d = new Date(); return `${d.getFullYear()}-${Strin
 export function diasDesde(d) { if (!d) return null; return Math.round((new Date(hoy()) - new Date(d.slice(0, 10))) / 86400000); }
 
 // ===== Catálogos de pantalla =====
+// Expediente según AF-02 v1.1 (formatos del SG, 18-sep-2026): cinco documentos; tres más si la actividad es transporte.
 export const DOCS = [
-  { tipo: 'identificacion_oficial_ine', nombre: 'Identificación oficial (INE) por ambos lados', corto: 'INE' },
-  { tipo: 'curp', nombre: 'Constancia de la CURP', corto: 'CURP' },
-  { tipo: 'solicitud_afiliacion_firmada', nombre: 'Solicitud de afiliación (AF-01) firmada de puño y letra', corto: 'Solicitud AF-01' },
-  { tipo: 'cedula_afiliacion_anexo23', nombre: 'Cédula de afiliación · Anexo 23 (AF-08)', corto: 'Anexo 23' },
-  { tipo: 'aviso_privacidad_firmado', nombre: 'Aviso de privacidad (AF-03) firmado', corto: 'Aviso de privacidad' },
+  { tipo: 'solicitud', nombre: 'Solicitud de afiliación firmada (Anexo 12 y 13: manifestación y aviso de privacidad, dos firmas de puño y letra)', corto: 'Solicitud (Anexo 12-13)', ayuda: 'El sistema te la entrega prellenada; imprímela, fírmala en las dos hojas y súbela escaneada o fotografiada completa.' },
+  { tipo: 'cedula', nombre: 'Cédula de afiliación firmada (Anexo 23), con todos los campos', corto: 'Cédula (Anexo 23)', ayuda: 'También te la entrega prellenada el sistema; fírmala y súbela.' },
+  { tipo: 'identificacion', nombre: 'Identificación oficial vigente (credencial para votar INE), frente y reverso', corto: 'INE', ayuda: 'Legible, sin recortes.' },
+  { tipo: 'curp', nombre: 'Constancia de la CURP', corto: 'CURP', ayuda: 'Impresa desde el portal oficial (gob.mx).' },
+  { tipo: 'constancia_fiscal', nombre: 'Constancia de Situación Fiscal (SAT), reciente y con RFC completo', corto: 'Constancia fiscal', ayuda: 'Se descarga del portal del SAT. Se usa para la emisión de tus recibos.' },
 ];
-export const DOC_NOMBRE = Object.fromEntries(DOCS.map(d => [d.tipo, d.nombre]));
-export const DOC_CORTO = Object.fromEntries(DOCS.map(d => [d.tipo, d.corto]));
+export const DOCS_TRANSPORTE = [
+  { tipo: 'tarjeta_circulacion', nombre: 'Tarjeta de circulación (solo transporte de pasajeros o última milla)', corto: 'Tarjeta de circulación' },
+  { tipo: 'poliza', nombre: 'Póliza de seguro del vehículo (solo transporte)', corto: 'Póliza de seguro' },
+  { tipo: 'licencia', nombre: 'Licencia de manejo (solo transporte)', corto: 'Licencia de manejo' },
+];
+export function docsRequeridos(transporte) { return transporte ? [...DOCS, ...DOCS_TRANSPORTE] : DOCS; }
+const TODOS_DOCS = [...DOCS, ...DOCS_TRANSPORTE, { tipo: 'otro', nombre: 'Otro documento', corto: 'Otro' },
+  // tipos históricos (antes del 18-sep-2026), por si quedara alguno
+  { tipo: 'identificacion_oficial_ine', nombre: 'Identificación oficial (INE)', corto: 'INE' }, { tipo: 'solicitud_afiliacion_firmada', nombre: 'Solicitud AF-01 firmada', corto: 'Solicitud' }, { tipo: 'cedula_afiliacion_anexo23', nombre: 'Cédula Anexo 23', corto: 'Cédula' }, { tipo: 'aviso_privacidad_firmado', nombre: 'Aviso de privacidad firmado', corto: 'Aviso' }];
+export const DOC_NOMBRE = Object.fromEntries(TODOS_DOCS.map(d => [d.tipo, d.nombre]));
+export const DOC_CORTO = Object.fromEntries(TODOS_DOCS.map(d => [d.tipo, d.corto]));
+export const ESTADOS_MX = ['Aguascalientes','Baja California','Baja California Sur','Campeche','Chiapas','Chihuahua','Ciudad de México','Coahuila','Colima','Durango','Estado de México','Guanajuato','Guerrero','Hidalgo','Jalisco','Michoacán','Morelos','Nayarit','Nuevo León','Oaxaca','Puebla','Querétaro','Quintana Roo','San Luis Potosí','Sinaloa','Sonora','Tabasco','Tamaulipas','Tlaxcala','Veracruz','Yucatán','Zacatecas'];
 export const ESTADO_INFO = {
   'Recibida': { etiqueta: 'azul', persona: 'Tu solicitud fue recibida y está en revisión.' },
   'Prevenida': { etiqueta: 'amarillo', persona: 'Falta algo en tu expediente. Revisa la lista y sube lo que se indica antes de la fecha límite.' },
@@ -50,7 +61,9 @@ export const ESTADO_INFO = {
   'Desistida': { etiqueta: 'carbon', persona: 'La solicitud quedó sin efectos por desistimiento.' },
 };
 export const SEMAFORO_TXT = { verde: 'Lista para dictamen', amarillo: 'Expediente incompleto', rojo: 'Revisar: duplicado o confianza', cerrada: 'Concluida' };
-export const ROL_NOMBRE = { cen_organizacion: 'Organización del CEN', sg: 'Secretario General', cen_lectura: 'CEN (lectura)', seccion_organizacion: 'Organización de Sección', seccion_sg: 'Secretaría General de Sección' };
+export const ROL_NOMBRE = { cen_organizacion: 'Organización del CEN', sg: 'Secretario General', cen_lectura: 'CEN (lectura)', seccion_organizacion: 'Organización de Sección', seccion_sg: 'Secretaría General de Sección', finanzas: 'Secretaría de Finanzas' };
+export function fechaHoraLarga(ts) { if (!ts) return '—'; const d = new Date(ts); const f = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', day: 'numeric', month: 'long', year: 'numeric' }).format(d); const h = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: false }).format(d); return `${f} a las ${h} horas`; }
+export function dinero(n) { return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(n || 0)); }
 
 // ===== Sesión y perfil =====
 let _perfil = null;
@@ -73,6 +86,7 @@ export async function requerirRol(roles) {
 }
 export function destinoPorRol(rol) {
   if (rol === 'sg') return ROOT + 'sg/';
+  if (rol === 'finanzas') return ROOT + 'finanzas/';
   if (rol === 'cen_organizacion' || rol === 'cen_lectura') return ROOT + 'cen/';
   if (rol === 'seccion_organizacion' || rol === 'seccion_sg') return ROOT + 'seccion/';
   return ROOT;
@@ -82,6 +96,9 @@ export async function salir() { await sb.auth.signOut(); _perfil = null; locatio
 // ===== Cabecera y pie =====
 export async function armazon({ titulo = '', nav = [], activa = '' } = {}) {
   const p = await perfil();
+  if (p && p.rol && !nav.length) {
+    if (['cen_organizacion', 'cen_lectura', 'sg', 'finanzas'].includes(p.rol)) nav = [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }, { href: ROOT + 'finanzas/', texto: 'Finanzas', id: 'finanzas' }];
+  } else if (p && ['cen_organizacion', 'cen_lectura', 'sg', 'finanzas'].includes(p.rol) && !nav.some(n => n.id === 'finanzas')) nav = [...nav, { href: ROOT + 'finanzas/', texto: 'Finanzas', id: 'finanzas' }];
   const enlaces = nav.map(n => `<a href="${n.href}" class="${n.id === activa ? 'activa' : ''}">${esc(n.texto)}</a>`).join('');
   const usuario = p ? `<span class="usuario">${esc(p.nombre || p.email)}${p.secciones ? ' · ' + esc(p.secciones.denominacion) : ''} · <a href="#" id="salir-enlace">Salir</a></span>` : `<a href="${ROOT}entrar/">Entrar</a>`;
   const cab = $('#cabecera') || document.body.insertAdjacentElement('afterbegin', Object.assign(document.createElement('header'), { id: 'cabecera' }));
@@ -140,11 +157,15 @@ export function correoDesfavorable(s) {
   return { asunto: `SITAD · Dictamen de afiliación · Folio ${s.folio}`,
     cuerpo: `${CFG.LUGAR_EXPEDICION}, a ${fechaLarga(s.fecha_dictamen || hoy())}\n\nVista la solicitud de afiliación presentada el ${fechaLarga(s.fecha_recepcion)} por ${s.nombre_completo.toUpperCase()} y la documentación que obra en el expediente, esta Secretaría advierte que no se acredita el siguiente requisito de ingreso: ${s.motivo_desfavorable || '[requisito y motivo]'}.\n\nEn consecuencia, se dictamina DESFAVORABLE la solicitud. La persona interesada podrá presentar una nueva solicitud cuando reúna el requisito señalado, y puede solicitar aclaraciones a esta Secretaría por este medio.\n\nNotifíquese.\n\n${FIRMA}` };
 }
+// Correo 5 (AF-04) o correo 4 (AF-04b, sedes en constitución: incluye la información para la asamblea)
 export function correoAlta(p, s) {
-  const nombre = p.nombre_completo.split(' ')[0];
+  const nombre = p.nombre_completo.split(' ')[0]; const seccion = p.seccion || s?.seccion;
+  const asamblea = p.asamblea_fecha_hora || s?.asamblea_fecha_hora; const dir = p.asamblea_direccion || s?.asamblea_direccion; const conv = p.convocatoria_url || s?.convocatoria_url;
+  const enConstitucion = !!asamblea;
+  const bloqueAsamblea = enConstitucion ? `\n\nInformación para la asamblea. Fecha: ${fechaHoraLarga(asamblea)}. Lugar: ${dir || '[dirección]'}. Llega una hora antes del inicio con tu gafete impreso o en el teléfono y tu identificación oficial vigente; sin identificación no es posible registrar tu asistencia. El código QR del gafete y esta liga te llevan a los Documentos Básicos del Sindicato: ${LIGA_DOCS}.${conv ? ' Convocatoria: ' + conv + '.' : ''}` : '';
   return { asunto: `SITAD · Bienvenido(a) · Alta en el Padrón · Folio ${p.folio}`,
-    cuerpo: `Hola, ${nombre}:\n\nEl Secretario General autorizó tu alta en el Padrón de Afiliados el ${fechaLarga(p.fecha_autorizacion_sg || s?.fecha_autorizacion_sg)}. A partir de hoy formas parte del ${CFG.SINDICATO}, adscrito(a) a la ${p.seccion || s?.seccion}.\n\nAdjuntamos tu Constancia de Registro de Afiliación y tu credencial. Tu número de afiliación es ${p.numero_afiliacion}.\n\nLa Secretaría de Finanzas te enviará por separado la información para cubrir tu cuota sindical ordinaria; el comprobante se remite al correo que ella te indique con tu nombre completo y tu número de sección.\n\nTe invitamos a leer los Documentos Básicos: ${LIGA_DOCS}. Tu Sección te contactará para integrarte a sus actividades.\n\n${FIRMA}`,
-    finanzas: `Se informa el alta de ${p.nombre_completo}, número de afiliación ${p.numero_afiliacion}, folio ${p.folio}, ${p.seccion || s?.seccion}, para la gestión de su cuota sindical ordinaria.` };
+    cuerpo: `Hola, ${nombre}:\n\nEl Secretario General autorizó tu alta en el Padrón de Afiliados el ${fechaLarga(p.fecha_autorizacion_sg || s?.fecha_autorizacion_sg)}. A partir de hoy formas parte del ${CFG.SINDICATO}, ${enConstitucion ? 'con adscripción a la ' + seccion + ', y quedas registrado(a) para participar en su Asamblea Constitutiva' : 'adscrito(a) a la ' + seccion}. Tu número de afiliación es ${p.numero_afiliacion}.\n\nAdjuntamos tu Constancia de Registro${enConstitucion ? ' (con la información de la asamblea) y tu gafete' : ' de Afiliación y tu credencial'}.${bloqueAsamblea}\n\nLa Secretaría de Finanzas te ${enConstitucion ? 'enviará por separado' : 'envía adjunta'} la información para cubrir tu cuota sindical ordinaria (cuenta, monto y cómo enviar tu comprobante). También puedes registrar tu pago en ${ROOT}pagos/.\n\n${enConstitucion ? '' : 'Te invitamos a leer los Documentos Básicos: ' + LIGA_DOCS + '. Tu Sección te contactará para integrarte a sus actividades.\n\n'}${enConstitucion ? 'Atentamente,\nMESA DE REGISTRO · ' : ''}${FIRMA}`,
+    finanzas: `Se informa el alta de ${p.nombre_completo}, número de afiliación ${p.numero_afiliacion}, folio ${p.folio}, ${seccion}, para la gestión de su cuota sindical ordinaria.` };
 }
 export function correoAlSG(lista) {
   const filas = lista.map(s => `• ${s.folio} · ${s.nombre_completo} · ${s.seccion} · dictamen del ${fecha(s.fecha_dictamen)}`).join('\n');
