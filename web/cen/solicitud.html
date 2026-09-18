@@ -17,28 +17,29 @@
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, docsRequeridos, DOC_NOMBRE, DOC_CORTO, ESTADO_INFO, SEMAFORO_TXT, urlFirmada, subirArchivo, validarArchivo, rutaDocumento, mailto, whatsapp, ligaTramite, correoAcuse, correoPrevencion, correoFavorable, correoDesfavorable, correoAlta, correoAlSG, correoFinanzas, waAcuse, waPrevencion, waFavorable, waDesfavorable, waAlta, ROOT, CFG } from '../assets/app.js';
+import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, docsRequeridos, DOC_NOMBRE, DOC_CORTO, ESTADO_INFO, SEMAFORO_TXT, urlFirmada, subirArchivo, validarArchivo, rutaDocumento, mailto, whatsapp, ligaTramite, correoAcuse, correoPrevencion, correoFavorable, correoDesfavorable, correoAlta, correoAlSG, correoFinanzas, correoSeguimiento, waAcuse, waPrevencion, waFavorable, waDesfavorable, waAlta, waSeguimiento, ROOT, CFG } from '../assets/app.js';
 import { tarjetaDoc, activarTarjetas } from '../assets/docs-ui.js';
 const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas', 'seccion_organizacion', 'seccion_sg']); if (!p) throw new Error('sin acceso');
 const esSeccion = ['seccion_organizacion', 'seccion_sg'].includes(p.rol);
 await armazon(esSeccion ? { titulo: p.secciones ? p.secciones.denominacion : 'Sección' } : { titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
 $('#volver').href = esSeccion ? ROOT + 'seccion/' : ROOT + 'cen/';
 const esOrg = p.rol === 'cen_organizacion'; const puedeSubir = esOrg || p.rol === 'seccion_organizacion'; const id = param('id'); const vista = $('#vista');
-let s, docs, pad, correoSG = '', cfg = {};
+let s, docs, pad, correoSG = '', cfg = {}, segs = [];
 const dd = (k, val) => `<dt>${k}</dt><dd>${val == null || val === '' ? '—' : val}</dd>`;
 const enviar = (titulo, tel, correo, asunto, cuerpoCorreo, cuerpoWa, cc) => `<div class="envio"><span class="small"><b>${titulo}</b></span> <a class="btn wa chico" href="${whatsapp(tel, cuerpoWa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(correo, asunto, cuerpoCorreo, cc)}">Correo</a></div>`;
 await cargar();
 
 async function cargar() {
-  const [r1, r2, r3, r4, r5] = await Promise.all([
+  const [r1, r2, r3, r4, r5, r6] = await Promise.all([
     sb.from('v_solicitudes').select('*').eq('id', id).single(),
     sb.from('solicitud_documentos').select('*').eq('solicitud_id', id).order('created_at'),
     sb.from('v_padron').select('*').eq('solicitud_id', id).maybeSingle(),
     esSeccion ? Promise.resolve({ data: [] }) : sb.from('usuarios_roles').select('email').eq('rol', 'sg').eq('activo', true).not('email', 'like', '%@sitad.test').limit(1),
     esSeccion ? Promise.resolve({ data: [] }) : sb.from('configuracion').select('clave, valor'),
+    sb.from('solicitud_seguimientos').select('*').eq('solicitud_id', id).order('created_at', { ascending: false }),
   ]);
   if (r1.error || !r1.data) { vista.innerHTML = `<div class="aviso error">No se encontró la solicitud.</div>`; return; }
-  s = r1.data; docs = r2.data || []; pad = r3.data; correoSG = r4.data && r4.data[0] ? r4.data[0].email : ''; s.documentos = docs;
+  s = r1.data; docs = r2.data || []; pad = r3.data; correoSG = r4.data && r4.data[0] ? r4.data[0].email : ''; s.documentos = docs; segs = r6.data || [];
   cfg = Object.fromEntries((r5.data || []).map(x => [x.clave, x.valor]));
   render();
 }
@@ -101,6 +102,11 @@ function render() {
         ${esOrg && !cerrada ? `<div class="acciones"><button class="btn discreto chico" id="a-transporte">${s.actividad_transporte ? 'Quitar la marca de transporte' : 'Marcar como transporte (pide 3 documentos más)'}</button></div>` : ''}
       </div>
 
+      <div class="tarjeta">
+        <h3>Seguimiento a la persona <span class="tiny muted">(cuantas veces haga falta; la persona lo ve en su consulta)</span></h3>
+        ${segs.length ? `<ol class="linea-tiempo">${segs.map(g => { const pts = g.puntos || []; const wa = g.tipo === 'prevencion' ? waPrevencion(s, pts) : waSeguimiento(s, pts); const co = g.tipo === 'prevencion' ? correoPrevencion(s, pts) : correoSeguimiento(s, pts); return `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención formal' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'} · ${fechaLarga(g.fecha)}</b><span>${pts.length ? pts.map((x, i) => (i + 1) + '. ' + esc(x)).join('<br>') : esc(g.texto || '')}</span>${!esSeccion || true ? `<div class="mt-1"><a class="btn wa chico" href="${whatsapp(tel, wa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(s.correo, co.asunto, co.cuerpo)}">Correo</a></div>` : ''}</li>`; }).join('')}</ol>` : '<p class="small muted">Todavía no hay seguimientos.</p>'}
+        ${esOrg && abierta ? `<div class="acciones"><button class="btn secundario" id="a-seguimiento">Pedir corrección / dar seguimiento</button><span class="small muted">Se arma con lo que falta y tus observaciones; luego lo envías por WhatsApp o correo.</span></div>` : ''}
+      </div>
       ${esOrg ? `<div class="tarjeta">
         <h3>Mensaje para la persona <span class="tiny muted">(lo ve en "Consultar mi trámite")</span></h3>
         <textarea id="mensaje">${esc(s.mensaje_publico || '')}</textarea>
@@ -134,7 +140,7 @@ function render() {
         ${s.fecha_dictamen && s.sentido === 'Favorable' ? enviar('3 · Dictamen favorable', tel, s.correo, correoFavorable(s).asunto, correoFavorable(s).cuerpo, waFavorable(s)) : ''}
         ${s.fecha_dictamen && s.sentido === 'Desfavorable' ? enviar('4 · Dictamen desfavorable', tel, s.correo, correoDesfavorable(s).asunto, correoDesfavorable(s).cuerpo, waDesfavorable(s)) : ''}
         ${s.fecha_dictamen ? `<p class="tiny"><a href="${ROOT}documento.html?tipo=dictamen&${q}" target="_blank">FT-001 · Dictamen (imprimir)</a>${s.sentido === 'Favorable' && !s.fecha_autorizacion_sg && !esSeccion ? ` · <a href="${mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo)}">Remitir al Secretario General</a>` : ''}</p>` : ''}
-        ${padC ? enviar(s.asamblea_fecha_hora ? '5 · Alta e información para la asamblea' : '5 · Alta y bienvenida', tel, s.correo, correoAlta(padC, s).asunto, correoAlta(padC, s).cuerpo, waAlta(padC, s)) + `
+        ${padC ? (pad.alta_enviada_at ? `<div class="aviso ok small">Alta enviada el ${fechaLarga(String(pad.alta_enviada_at).slice(0, 10))}${pad.alta_enviada_medio ? ' por ' + esc(pad.alta_enviada_medio) : ''}.</div>` : `<div class="aviso small"><b>Alta autorizada por el SG: por enviar.</b> Manda el paso 5 con los documentos y pulsa "Marcar como enviada".</div>`) + enviar(s.asamblea_fecha_hora ? '5 · Alta e información para la asamblea' : '5 · Alta y bienvenida', tel, s.correo, correoAlta(padC, s).asunto, correoAlta(padC, s).cuerpo, waAlta(padC, s)) + (esOrg && !pad.alta_enviada_at ? `<div class="acciones" style="margin:.3rem 0"><button class="btn verde chico" id="a-enviada-wa">✓ Marcar como enviada por WhatsApp</button><button class="btn secundario chico" id="a-enviada-correo">✓ Marcar como enviada por correo</button></div>` : '') + `
           <p class="tiny"><b>Adjunta a ese mensaje:</b> <a href="${ROOT}documento.html?tipo=constancia&id=${pad.id}" target="_blank">Constancia (Anexo 15)</a> · <a href="${ROOT}documento.html?tipo=gafete&id=${pad.id}" target="_blank">Gafete (Anexo 14)</a> · <a href="${ROOT}documento.html?tipo=credencial&id=${pad.id}" target="_blank">Credencial</a> · <a href="${ROOT}documento.html?tipo=finanzas&id=${pad.id}" target="_blank">Carta de Finanzas (AF-09)</a>. Descárgalos en PDF con el botón de cada documento.</p>
           ${!esSeccion ? enviar('6 · Cuota sindical (carta AF-09)', tel, s.correo, correoFinanzas(padC, cfg).asunto, correoFinanzas(padC, cfg).cuerpo, correoFinanzas(padC, cfg).cuerpo) + `<p class="tiny"><a href="${mailto(CFG.CORREO_FINANZAS, 'SITAD · Alta en el Padrón · ' + pad.folio, correoAlta(padC, s).finanzas)}">Aviso interno a Finanzas</a></p>` : ''}` : ''}
         <p class="tiny muted mt-2">WhatsApp abre WhatsApp Web o la app con el número de la persona y el mensaje ya escrito; tú solo pulsas enviar. Los correos se abren en tu programa de correo hasta que exista el buzón institucional.</p>
@@ -189,7 +195,8 @@ function enlazar(cerrada, abierta, req) {
   on('guardar-mensaje', () => actualizar({ mensaje_publico: $('#mensaje').value.trim() || null }, 'Mensaje guardado; la persona lo ve en su consulta.'));
   on('a-revisado', () => actualizar({ revisado_at: new Date().toISOString() }, 'Marcada como revisada.'));
   on('a-transporte', () => actualizar({ actividad_transporte: !s.actividad_transporte }, 'Marca de transporte actualizada; el expediente se recalculó.'));
-  on('a-prevenir', () => prevenir(req)); on('a-favorable', favorable); on('a-desfavorable', desfavorable); on('a-subsanada', () => actualizar({ fecha_subsanacion: hoy() }, 'Subsanación registrada; el plazo se reanuda.'));
+  on('a-prevenir', () => prevenir(req)); on('a-seguimiento', () => seguimiento(req)); on('a-favorable', favorable);
+  on('a-enviada-wa', () => marcarEnviada('WhatsApp')); on('a-enviada-correo', () => marcarEnviada('correo')); on('a-desfavorable', desfavorable); on('a-subsanada', () => actualizar({ fecha_subsanacion: hoy() }, 'Subsanación registrada; el plazo se reanuda.'));
   on('a-enviar-sg', () => actualizar({ fecha_envio_sg: hoy() }, 'Marcada como enviada al SG.', true));
   on('a-autorizacion-externa', () => { const ref = prompt('¿Cómo autorizó el Secretario General? (oficio, correo o mensaje y fecha). Queda como referencia de la autorización.'); if (!ref) return; const f = prompt('Fecha de la autorización (aaaa-mm-dd):', hoy()); if (!f) return; sb.rpc('registrar_autorizacion_externa', { p_id: s.id, p_fecha: f, p_ref: ref }).then(({ error }) => { if (error) toast('No se pudo registrar: ' + error.message, 'error'); else { toast('Autorización registrada; el alta se ejecutó en automático.', 'ok'); cargar(); } }); });
   on('a-alta', alta); on('a-desistir', () => { if (!confirm('¿Registrar desistimiento? La solicitud queda sin efectos.')) return; actualizar({ fecha_dictamen: hoy(), sentido: 'Desistimiento' }, 'Desistimiento registrado.'); });
@@ -201,20 +208,36 @@ async function actualizar(cambios, msg, abrirSG) {
   toast(msg, 'ok'); await cargar();
   if (abrirSG) window.open(mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo), '_blank');
 }
-async function prevenir(req) {
+function puntosSugeridos(req) {
   const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
   const faltan = [];
   for (const d of req) { if (d.partes) { for (const [pt, n] of d.partes) if (!existentes[d.tipo + '|' + pt]) faltan.push(`${d.nombre}: falta ${n.toLowerCase()}`); } else if (!existentes[d.tipo + '|']) faltan.push(d.nombre); }
-  const conObs = docs.filter(d => d.observacion).map(d => `${DOC_NOMBRE[d.tipo] || d.tipo}${d.parte ? ' (' + d.parte + ')' : ''}: ${d.observacion}`);
-  const sugerido = [...faltan.map(f => `Falta: ${f}; súbalo por el medio institucional indicando su folio.`), ...conObs];
-  const texto = prompt('Puntos de la prevención, uno por renglón (se numeran PRIMERO, SEGUNDO…). Se toman de lo que falta y de las observaciones que anotaste en cada documento. Puedes editar:', sugerido.join('\n'));
+  const conObs = docs.filter(d => d.observacion && d.validado !== true).map(d => `${DOC_NOMBRE[d.tipo] || d.tipo}${d.parte ? ' (' + d.parte + ')' : ''}: ${d.observacion}`);
+  return [...faltan.map(f => `Falta: ${f}; súbalo por el medio institucional indicando su folio.`), ...conObs];
+}
+async function prevenir(req) {
+  const texto = prompt('PREVENCIÓN FORMAL (una sola vez; fija plazo de 10 días hábiles). Puntos, uno por renglón (se numeran PRIMERO, SEGUNDO…). Se toman de lo que falta y de las observaciones que anotaste en cada documento. Puedes editar:', puntosSugeridos(req).join('\n'));
   if (!texto || !texto.trim()) return;
   const puntos = texto.split('\n').map(x => x.trim()).filter(Boolean);
   const notas = (s.notas || '').replace(/\[PREVENCION\][\s\S]*?\[\/PREVENCION\]\n?/, '') + `\n[PREVENCION]\n${puntos.join('\n')}\n[/PREVENCION]`;
   const { error } = await sb.from('solicitudes_afiliacion').update({ fecha_prevencion: hoy(), notas: notas.trim(), revisado_at: new Date().toISOString() }).eq('id', s.id);
   if (error) return toast('No se pudo registrar: ' + error.message, 'error');
+  await sb.from('solicitud_seguimientos').insert({ solicitud_id: s.id, tipo: 'prevencion', puntos });
   await cargar(); toast('Prevención registrada. Ahora envíala con los botones WhatsApp o Correo (paso 2).', 'ok');
   document.querySelector('.lateral .tarjeta:last-child')?.scrollIntoView({ behavior: 'smooth' });
+}
+async function seguimiento(req) {
+  const texto = prompt('SEGUIMIENTO (se puede hacer cuantas veces haga falta; no fija plazo nuevo). Puntos a corregir, uno por renglón. Puedes editar:', puntosSugeridos(req).join('\n'));
+  if (!texto || !texto.trim()) return;
+  const puntos = texto.split('\n').map(x => x.trim()).filter(Boolean);
+  const { error } = await sb.from('solicitud_seguimientos').insert({ solicitud_id: s.id, tipo: 'seguimiento', puntos });
+  if (error) return toast('No se pudo registrar: ' + error.message, 'error');
+  await cargar(); toast('Seguimiento registrado. Envíalo con WhatsApp o Correo desde la tarjeta "Seguimiento a la persona".', 'ok');
+}
+async function marcarEnviada(medio) {
+  const { error } = await sb.rpc('marcar_alta_enviada', { p_padron: pad.id, p_medio: medio });
+  if (error) return toast('No se pudo marcar: ' + error.message, 'error');
+  toast('Alta marcada como enviada por ' + medio + '.', 'ok'); cargar();
 }
 async function favorable() {
   const req = [];

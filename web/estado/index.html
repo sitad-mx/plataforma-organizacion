@@ -36,10 +36,11 @@ if (param('f') && param('c')) consultar();
 async function consultar() {
   const folio = $('#folio').value.trim().toUpperCase(), clave = $('#clave').value.trim();
   const btn = $('#buscar'); ocupado(btn, true, 'Buscando…'); res.innerHTML = '<p class="cargando">Buscando…</p>';
-  const [{ data: s, error }, { data: docs }, { data: datos }] = await Promise.all([
+  const [{ data: s, error }, { data: docs }, { data: datos }, { data: segs }] = await Promise.all([
     sb.rpc('consultar_solicitud', { p_folio: folio, p_correo: clave }),
     sb.rpc('documentos_publicos', { p_folio: folio, p_correo: clave }),
     sb.rpc('solicitud_publica_datos', { p_folio: folio, p_correo: clave }),
+    sb.rpc('seguimientos_publicos', { p_folio: folio, p_correo: clave }),
   ]);
   ocupado(btn, false);
   if (error || !s || !s.length) { res.innerHTML = `<div class="aviso error"><b>No encontramos esa solicitud.</b> Revisa que el folio sea el que recibiste y que tu nombre o correo estén escritos como en tu solicitud. Si el problema sigue, escribe a <a href="mailto:${CFG.CORREO_ORGANIZACION}">${CFG.CORREO_ORGANIZACION}</a> con tu nombre completo.</div>`; return; }
@@ -66,6 +67,7 @@ async function consultar() {
       <h2>Folio ${esc(x.folio)} <span class="etiqueta ${info.etiqueta || ''}">${esc(x.estado)}</span></h2>
       <p>${esc(info.persona || '')}</p>
       ${x.mensaje_publico ? `<div class="aviso"><b>Mensaje de la Secretaría de Organización:</b><br>${esc(x.mensaje_publico).replace(/\n/g, '<br>')}</div>` : ''}
+      ${segs && segs.length ? `<div class="aviso atencion"><b>Lo que la Secretaría te ha pedido corregir</b> (lo más reciente primero):<ol class="linea-tiempo mt-1">${segs.map(g => `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'} · ${fechaLarga(g.fecha)}</b><span>${(g.puntos || []).length ? g.puntos.map((p, i) => (i + 1) + '. ' + esc(p)).join('<br>') : esc(g.texto || '')}</span></li>`).join('')}</ol>${abiertaTexto(x.estado)}</div>` : ''}
       ${enConstitucion && x.estado !== 'Ejecutada en padrón' ? `<div class="aviso small">Tu Sección está en constitución: con tu alta quedas registrado(a) para la <b>Asamblea Constitutiva</b> del ${esc(fechaHoraLarga(datos.asamblea_fecha_hora))}${datos.asamblea_direccion ? ', ' + esc(datos.asamblea_direccion) : ''}.</div>` : ''}
       ${x.estado === 'Ejecutada en padrón' ? `<div class="aviso ok small"><b>Ya eres persona afiliada.</b> Tu Constancia de Registro${enConstitucion ? ' y tu gafete para la asamblea' : ' y tu credencial'} te los envía la Secretaría de Organización por correo y WhatsApp. Documentos Básicos del Sindicato: <a href="${CFG.LIGA_DOCUMENTOS_BASICOS}" target="_blank">Estatutos y Documentos Básicos</a>. Para tu cuota sindical, <a href="${ROOT}pagos/?curp=${encodeURIComponent(datos?.curp || '')}">registra tu pago aquí</a>.</div>` : ''}
       <ol class="linea-tiempo mt-2">${pasos.map(p => `<li class="${p.ok ? 'hecho' : ''}"><b>${esc(p.t)}</b><span>${p.f ? fechaLarga(p.f) : (p.ok ? 'Hecho' : 'Pendiente')}${p.extra ? ' · ' + esc(p.extra) : ''}</span></li>`).join('')}</ol>
@@ -85,6 +87,7 @@ async function consultar() {
   }
 }
 
+function abiertaTexto(estado) { return ['Recibida', 'Prevenida', 'Subsanada'].includes(estado) ? '<p class="small mb-0 mt-1">Sube lo corregido abajo, en la tarjeta de cada documento. Si tienes dudas, tu Sección te ayuda.</p>' : ''; }
 async function subir(folio, clave, slug, archivos) {
   if (!archivos.length) return toast('Primero elige un archivo o toma una foto en la tarjeta del documento.', 'error');
   const btn = $('#subir'); ocupado(btn, true, 'Subiendo…'); let ok = 0;
