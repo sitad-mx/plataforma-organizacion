@@ -11,7 +11,7 @@ Aplicación web de la Secretaría Nacional de Organización del Sindicato de Tra
 | Carpeta | Qué contiene |
 |---|---|
 | `supabase/migrations/` | El plano ejecutable de la base (mismo historial que el proyecto en Supabase). |
-| `web/` | El sitio: puerta pública (`/afiliate/[seccion]`, `/estado`, `/verificar`), CEN (`/cen/…`) y Sección (`/seccion/…`). *(Módulo 1, en construcción)* |
+| `web/` | El sitio (Módulo 1): puerta pública (`afiliate/?s=[seccion]`, `estado/`, `verificar/`), acceso (`entrar/`), CEN (`cen/`), Secretario General (`sg/`), Sección (`seccion/`) y documentos imprimibles (`documento.html`). Se publica solo con GitHub Pages al hacer push a `main` (`.github/workflows/pages.yml`). |
 
 ## Reglas
 

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SITAD · Secretaría de Organización</title>
+<meta name="description" content="Plataforma de la Secretaría de Organización del Sindicato de Trabajadores Digitales de REEDCAM (SITAD): afiliación, consulta de trámite y verificación de credencial.">
+<link rel="icon" href="assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+
+<main class="portada">
+  <p class="muted" style="letter-spacing:.08em;text-transform:uppercase;font-size:.8rem;font-weight:700;color:var(--rojo)">Secretaría de Organización · Comité Ejecutivo Nacional</p>
+  <h1>Afiliarte al Sindicato de Trabajadores Digitales de REEDCAM empieza aquí.</h1>
+  <p class="entrada">Tres requisitos, cinco documentos, un folio. La Secretaría de Organización revisa tu expediente en un máximo de diez días hábiles y te avisa por correo en cada paso.</p>
+
+  <div class="puertas">
+    <a class="puerta" href="afiliate/">
+      <h3>Quiero afiliarme</h3>
+      <p>Entra con la liga que te dio tu Sección. Llenas tu solicitud, subes tus documentos y recibes tu folio al instante.</p>
+      <span class="flecha">Empezar →</span>
+    </a>
+    <a class="puerta" href="estado/">
+      <h3>Consultar mi trámite</h3>
+      <p>Con tu folio y tu correo ves en qué paso va tu solicitud y subes lo que te falte.</p>
+      <span class="flecha">Consultar →</span>
+    </a>
+    <a class="puerta" href="verificar/">
+      <h3>Verificar una credencial</h3>
+      <p>Escanea el código QR de la credencial o escribe su clave para confirmar que está vigente.</p>
+      <span class="flecha">Verificar →</span>
+    </a>
+    <a class="puerta" href="entrar/">
+      <h3>Soy de una Sección o del CEN</h3>
+      <p>Bandeja de solicitudes, padrón, directorio, movimientos y autorizaciones.</p>
+      <span class="flecha">Entrar →</span>
+    </a>
+  </div>
+
+  <section class="mt-4" style="max-width:760px">
+    <h2>Cómo funciona la afiliación</h2>
+    <ol class="linea-tiempo">
+      <li class="hecho"><b>1. Solicitud y expediente</b><span>Llenas la solicitud y subes cinco documentos: identificación oficial, CURP, solicitud firmada de puño y letra, cédula de afiliación (Anexo 23) y aviso de privacidad firmado. También puedes entregarlos a tu Sección para que los suba por ti.</span></li>
+      <li class="hecho"><b>2. Revisión de la Mesa de Registro</b><span>La Secretaría revisa que el expediente esté completo y que cumplas los tres requisitos: ser trabajador(a) en activo de la Empresa, presentar tu solicitud y aceptar el Estatuto. Si falta algo, te lo pide una sola vez.</span></li>
+      <li class="hecho"><b>3. Dictamen y autorización</b><span>La Secretaría dictamina en un máximo de diez días hábiles. El Secretario General autoriza el alta.</span></li>
+      <li class="hecho"><b>4. Alta, constancia y credencial</b><span>Quedas registrado(a) en el Padrón de Afiliados, adscrito(a) a tu Sección, y recibes tu Constancia de Registro y tu credencial con código QR.</span></li>
+    </ol>
+  </section>
+</main>
+
+<footer id="pie"></footer>
+<script type="module">
+  import { armazon } from './assets/app.js';
+  armazon({ titulo: 'Secretaría de Organización' });
+</script>
+</body>
+</html>

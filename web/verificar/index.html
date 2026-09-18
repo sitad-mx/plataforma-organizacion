@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verificar credencial · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido angosto">
+  <h1>Verificar una credencial</h1>
+  <p class="muted">Escanea el código QR de la credencial o escribe la clave de verificación que aparece al pie.</p>
+  <form id="forma" class="tarjeta">
+    <div class="campo"><label for="t">Clave de verificación</label><input type="text" id="t" required placeholder="32 caracteres"></div>
+    <div class="acciones"><button class="btn" type="submit">Verificar</button></div>
+  </form>
+  <div id="resultado" class="mt-2"></div>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, esc, param, armazon } from '../assets/app.js';
+await armazon({ titulo: 'Verificación de credencial' });
+const res = $('#resultado');
+if (param('t')) { $('#t').value = param('t'); verificar(); }
+$('#forma').onsubmit = e => { e.preventDefault(); verificar(); };
+async function verificar() {
+  const t = $('#t').value.trim(); res.innerHTML = '<p class="cargando">Verificando…</p>';
+  const { data, error } = await sb.rpc('verificar_credencial', { p_token: t });
+  if (error || !data || !data.length) { res.innerHTML = '<div class="aviso error"><b>Credencial no encontrada.</b> La clave no corresponde a ninguna credencial expedida por la Secretaría de Organización.</div>'; return; }
+  const c = data[0];
+  res.innerHTML = c.vigente
+    ? `<div class="aviso ok"><b>Credencial vigente.</b><br>Persona afiliada activa · ${esc(c.seccion)} · Número de afiliación ${esc(c.numero_afiliacion)}.<br><span class="small muted">Por protección de datos, esta verificación no muestra nombre ni otros datos personales.</span></div>`
+    : `<div class="aviso atencion"><b>Credencial no vigente.</b><br>La persona ya no figura como afiliada activa (${esc(c.seccion)}).</div>`;
+}
+</script>
+</body>
+</html>

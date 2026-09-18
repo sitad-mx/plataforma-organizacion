@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solicitud de afiliación · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+
+<main class="contenido medio">
+  <div id="vista"><p class="cargando">Cargando…</p></div>
+</main>
+
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, $$, esc, toast, ocupado, param, armazon, perfil, DOCS, DOC_NOMBRE, fecha, fechaLarga, hoy, subirArchivo, validarArchivo, rutaDocumento, ROOT, CFG } from '../assets/app.js';
+
+const vista = $('#vista');
+const slug = (param('s') || param('seccion') || '').toLowerCase().trim();
+await armazon({ titulo: 'Solicitud de afiliación' });
+
+if (!slug) {
+  vista.innerHTML = `<div class="tarjeta"><h1>Necesitas la liga de tu Sección</h1><p>La solicitud de afiliación se hace desde la liga que te comparte la Secretaría de Organización de tu Sección Sindical. Así tu solicitud queda ligada a ella desde el primer día.</p><p>Si no la tienes, pídela a tu Sección o escribe a <a href="mailto:${CFG.CORREO_ORGANIZACION}">${CFG.CORREO_ORGANIZACION}</a> indicando tu ciudad o zona de operación.</p><p class="mt-2"><a class="btn secundario" href="${ROOT}estado/">Ya tengo folio: consultar mi trámite</a></p></div>`;
+} else {
+  const { data: secs, error } = await sb.rpc('seccion_publica', { p_slug: slug });
+  const sec = secs && secs[0];
+  if (error || !sec) {
+    vista.innerHTML = `<div class="tarjeta"><h1>Esta liga no está activa</h1><p>La Sección indicada no existe o todavía no está habilitada para recibir solicitudes. Verifica la liga con tu Sección o escribe a <a href="mailto:${CFG.CORREO_ORGANIZACION}">${CFG.CORREO_ORGANIZACION}</a>.</p></div>`;
+  } else {
+    const p = await perfil();
+    const modoSeccion = p && p.rol === 'seccion_organizacion' && p.secciones && p.secciones.slug === slug;
+    const modoCEN = p && p.rol === 'cen_organizacion';
+    render(sec, modoSeccion || modoCEN ? 'seccion' : 'publico', p);
+  }
+}
+
+function render(sec, modo, p) {
+  const docsHtml = DOCS.map(d => `<div class="campo"><label for="f_${d.tipo}">${esc(d.nombre)}</label><input type="file" id="f_${d.tipo}" accept="application/pdf,image/jpeg,image/png"><span class="ayuda">PDF, JPG o PNG · máximo 5 MB</span></div>`).join('');
+  vista.innerHTML = `
+  <p class="muted small" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">${esc(sec.denominacion)}</p>
+  <h1>${modo === 'seccion' ? 'Registrar una solicitud recibida en la Sección' : 'Solicitud de afiliación'}</h1>
+  <p class="entrada muted">${modo === 'seccion'
+    ? `Estás registrando a nombre de la Sección (${esc(p.nombre || p.email)}). Captura los datos tal como vienen en la solicitud firmada y sube los documentos que recibiste.`
+    : 'Llena tus datos como aparecen en tu identificación oficial, sube tus documentos y recibirás tu folio de inmediato. Tardas unos diez minutos.'}</p>
+
+  <form id="forma" class="tarjeta mt-2" novalidate>
+    <fieldset>
+      <legend>1. Datos de la persona solicitante</legend>
+      <div class="campo"><label for="nombre">Nombre completo (como aparece en tu identificación) *</label><input type="text" id="nombre" required autocomplete="name"></div>
+      <div class="fila">
+        <div class="campo"><label for="curp">CURP</label><input type="text" id="curp" maxlength="18" style="text-transform:uppercase" placeholder="18 caracteres"><span class="ayuda">Si la tienes a la mano; también va en la constancia que subes.</span></div>
+        <div class="campo"><label for="fnac">Fecha de nacimiento</label><input type="date" id="fnac"></div>
+      </div>
+      <div class="campo"><label>Género</label><div class="opciones"><label><input type="radio" name="genero" value="Mujer"> Mujer</label><label><input type="radio" name="genero" value="Hombre"> Hombre</label></div></div>
+      <div class="campo"><label for="domicilio">Domicilio (calle, número, colonia, municipio, estado, C.P.)</label><input type="text" id="domicilio" autocomplete="street-address"></div>
+      <div class="fila">
+        <div class="campo"><label for="tel">Teléfono celular (WhatsApp) *</label><input type="tel" id="tel" required autocomplete="tel" placeholder="10 dígitos"></div>
+        <div class="campo"><label for="correo">Correo electrónico *</label><input type="email" id="correo" required autocomplete="email"><span class="ayuda">Aquí recibirás tu folio y los avisos del trámite.</span></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>2. Datos de la relación de trabajo</legend>
+      <div class="fila">
+        <div class="campo"><label>Empresa</label><input type="text" value="REEDCAM" disabled></div>
+        <div class="campo"><label for="puesto">Puesto o actividad *</label><input type="text" id="puesto" required placeholder="p. ej. conductor de plataforma digital"></div>
+      </div>
+      <div class="fila">
+        <div class="campo"><label for="centro">Centro de trabajo o adscripción (ciudad / zona de operación) *</label><input type="text" id="centro" required></div>
+        <div class="campo"><label for="finicio">Fecha de inicio de la relación de trabajo</label><input type="date" id="finicio"></div>
+      </div>
+      <div class="campo"><label>¿Desempeñas funciones de confianza (dirección, inspección, vigilancia o fiscalización de carácter general)?</label>
+        <div class="opciones"><label><input type="radio" name="confianza" value="no" checked> No</label><label><input type="radio" name="confianza" value="si"> Sí</label></div></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3. Solicitud y manifestación</legend>
+      <p class="small">Por medio de la presente <b>solicito mi ingreso</b> como persona afiliada al Sindicato de Trabajadores Digitales de REEDCAM (SITAD), y <b>manifiesto expresamente que conozco, acepto y me comprometo a cumplir el Estatuto</b> del Sindicato, su Declaración de Principios y su Programa de Acción, así como los acuerdos válidamente adoptados por sus órganos.</p>
+      <p class="small">Declaro bajo protesta de decir verdad que soy trabajador(a) en activo de la Empresa, que los datos y documentos que entrego son verdaderos y que no tengo la calidad de trabajador(a) de confianza que me excluya legalmente de la organización de los demás trabajadores.</p>
+      <label class="casilla"><input type="checkbox" id="acepta"> <span><b>Acepto y me comprometo a cumplir el Estatuto</b> y confirmo la declaración anterior. *</span></label>
+      <label class="casilla mt-1"><input type="checkbox" id="aviso"> <span>He leído el <a href="#" id="ver-aviso">Aviso de Privacidad</a> y otorgo mi consentimiento para el tratamiento de mis datos personales, incluido el dato de mi afiliación sindical, para las finalidades necesarias descritas. *</span></label>
+      <div id="texto-aviso" class="oculto aviso small mt-2">
+        <b>Responsable.</b> SINDICATO DE TRABAJADORES Y EMPLEADOS DE LA EMPRESA REEDCAM (en materiales, Sindicato de Trabajadores Digitales de REEDCAM, SITAD), con domicilio en ${CFG.DOMICILIO}.<br>
+        <b>Datos que se recaban.</b> Identificación y contacto (nombre, CURP, fecha de nacimiento, género, domicilio, teléfono, correo, firma, imagen de la identificación), datos laborales (empresa, puesto, centro de trabajo, fecha de ingreso) y datos del trámite (folio, fechas, dictamen, situación en el Padrón, credencial, asistencia a asambleas). La afiliación sindical es un dato que la ley considera sensible; se trata solo para las finalidades de este aviso y con tu consentimiento expreso.<br>
+        <b>Finalidades necesarias.</b> Recibir, revisar y dictaminar tu solicitud; integrar y resguardar tu expediente; registrarte en el Padrón de Afiliados; expedir tu credencial; adscribirte a tu Sección; verificar asistencia y quórum y elaborar el padrón electoral; cumplir obligaciones ante el Centro Federal de Conciliación y Registro Laboral y demás autoridades; gestionar la cuota sindical a través de la Secretaría de Finanzas; comunicarte convocatorias, avisos y resoluciones.<br>
+        <b>Transferencias.</b> Solo a las autoridades laborales y registrales cuando la ley lo exige. Los proveedores tecnológicos actúan por cuenta del Sindicato bajo confidencialidad.<br>
+        <b>Derechos ARCO y revocación.</b> Por escrito a la Secretaría de Organización en ${CFG.CORREO_ORGANIZACION} o en el domicilio del Sindicato.<br>
+        <b>Conservación.</b> Mientras subsista la afiliación y por el tiempo que exijan las obligaciones legales. Versión 1.0, septiembre de 2026.
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>4. Documentos del expediente</legend>
+      <p class="small muted">Son cinco. Si hoy no tienes alguno, puedes enviar la solicitud y subirlo después con tu folio y tu correo en <a href="${ROOT}estado/">Consultar mi trámite</a>. La solicitud y el aviso de privacidad deben ir firmados de puño y letra (no firma insertada como imagen).</p>
+      ${docsHtml}
+    </fieldset>
+
+    <div id="errores" class="aviso error oculto"></div>
+    <div class="acciones">
+      <button class="btn" type="submit" id="enviar">${modo === 'seccion' ? 'Registrar solicitud' : 'Enviar mi solicitud'}</button>
+      <span class="small muted">Al enviar se genera tu folio.</span>
+    </div>
+  </form>`;
+
+  $('#ver-aviso').onclick = e => { e.preventDefault(); $('#texto-aviso').classList.toggle('oculto'); };
+  $('#curp').addEventListener('input', e => e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+  $('#forma').onsubmit = e => { e.preventDefault(); enviar(sec, modo, p); };
+}
+
+async function enviar(sec, modo, p) {
+  const errores = [];
+  const v = id => $('#' + id).value.trim();
+  const nombre = v('nombre'), correo = v('correo').toLowerCase(), tel = v('tel'), puesto = v('puesto'), centro = v('centro');
+  const curp = v('curp') || null;
+  if (nombre.length < 5) errores.push('Escribe tu nombre completo.');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) errores.push('Escribe un correo electrónico válido.');
+  if (tel.replace(/\D/g, '').length < 10) errores.push('Escribe un teléfono de 10 dígitos.');
+  if (!puesto) errores.push('Indica tu puesto o actividad.');
+  if (!centro) errores.push('Indica tu centro de trabajo o zona de operación.');
+  if (curp && !/^[A-Z]{4}[0-9]{6}[HM][A-Z]{5}[0-9A-Z][0-9]$/.test(curp)) errores.push('La CURP no tiene el formato correcto (18 caracteres). Puedes dejarla vacía.');
+  if (!$('#acepta').checked) errores.push('Es necesario aceptar el Estatuto y confirmar la declaración.');
+  if (!$('#aviso').checked) errores.push('Es necesario aceptar el Aviso de Privacidad.');
+  const archivos = [];
+  for (const d of DOCS) { const f = $('#f_' + d.tipo).files[0]; if (f) { const err = validarArchivo(f); if (err) errores.push(`${d.nombre}: ${err}`); else archivos.push({ tipo: d.tipo, f }); } }
+  const caja = $('#errores');
+  if (errores.length) { caja.classList.remove('oculto'); caja.innerHTML = '<b>Revisa lo siguiente:</b><ul>' + errores.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>'; caja.scrollIntoView({ behavior: 'smooth' }); return; }
+  caja.classList.add('oculto');
+
+  const btn = $('#enviar'); ocupado(btn, true, 'Enviando…');
+  const datos = {
+    nombre_completo: nombre, correo, telefono: tel, curp, puesto, centro_trabajo: centro,
+    fecha_nacimiento: v('fnac') || null, fecha_inicio_relacion: v('finicio') || null, domicilio: v('domicilio') || null,
+    genero: (document.querySelector('input[name=genero]:checked') || {}).value || null,
+    es_confianza: document.querySelector('input[name=confianza]:checked').value === 'si',
+  };
+  let folio;
+  try {
+    if (modo === 'seccion') {
+      const { data, error } = await sb.from('solicitudes_afiliacion').insert({ ...datos, seccion_id: (await idSeccion(sec.slug)), canal: 'seccion', acepta_estatuto: true, acepta_estatuto_at: new Date().toISOString(), aviso_privacidad_at: new Date().toISOString() }).select('id, folio').single();
+      if (error) throw error; folio = data.folio; datos.id = data.id;
+    } else {
+      const { data, error } = await sb.rpc('crear_solicitud_publica', {
+        p_slug: sec.slug, p_nombre_completo: nombre, p_correo: correo, p_telefono: tel, p_curp: curp, p_fecha_nacimiento: datos.fecha_nacimiento, p_genero: datos.genero, p_domicilio: datos.domicilio,
+        p_puesto: puesto, p_centro_trabajo: centro, p_fecha_inicio_relacion: datos.fecha_inicio_relacion, p_es_confianza: datos.es_confianza, p_acepta_estatuto: true, p_acepta_aviso: true });
+      if (error) throw error; folio = data[0].folio;
+    }
+  } catch (err) { ocupado(btn, false); toast('No se pudo enviar la solicitud: ' + (err.message || err), 'error'); return; }
+
+  // Subir documentos (uno por uno; si alguno falla, el folio ya existe y se puede completar después)
+  const subidos = [], fallidos = [];
+  for (const a of archivos) {
+    try {
+      const ruta = rutaDocumento(sec.slug, folio, a.tipo, a.f.name);
+      await subirArchivo(ruta, a.f);
+      if (modo === 'seccion') {
+        const { error } = await sb.from('solicitud_documentos').insert({ solicitud_id: datos.id, tipo: a.tipo, archivo_url: ruta, nombre_archivo: a.f.name }); if (error) throw error;
+      } else {
+        const { error } = await sb.rpc('registrar_documento_publico', { p_folio: folio, p_correo: correo, p_tipo: a.tipo, p_archivo_url: ruta, p_nombre_archivo: a.f.name }); if (error) throw error;
+      }
+      subidos.push(a.tipo);
+    } catch (err) { fallidos.push(a.tipo + ': ' + (err.message || err)); }
+  }
+  const faltan = DOCS.filter(d => !subidos.includes(d.tipo));
+  vista.innerHTML = `
+    <div class="tarjeta">
+      <p class="muted small" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--verde)">Solicitud recibida</p>
+      <h1>Tu folio es <span class="rojo">${esc(folio)}</span></h1>
+      <p>${modo === 'seccion' ? 'La solicitud quedó registrada a nombre de la Sección.' : `Guárdalo. Con él y tu correo (<b>${esc(correo)}</b>) puedes consultar tu trámite en cualquier momento.`} Fecha de recepción: <b>${fechaLarga(hoy())}</b>. La Secretaría de Organización revisa el expediente y responde en un máximo de diez días hábiles.</p>
+      ${subidos.length ? `<div class="aviso ok"><b>Documentos recibidos (${subidos.length} de 5):</b> ${subidos.map(t => esc(DOC_NOMBRE[t])).join(' · ')}</div>` : ''}
+      ${faltan.length ? `<div class="aviso atencion"><b>Faltan ${faltan.length} documento(s):</b> ${faltan.map(d => esc(d.nombre)).join(' · ')}.<br>Puedes subirlos cuando los tengas en <a href="${ROOT}estado/">Consultar mi trámite</a> con tu folio y tu correo. Si no llegan, la Secretaría te los pedirá una sola vez.</div>` : ''}
+      ${fallidos.length ? `<div class="aviso error"><b>No se pudieron subir:</b> ${fallidos.map(esc).join('<br>')}. Inténtalo de nuevo desde Consultar mi trámite.</div>` : ''}
+      <div class="acciones">
+        <a class="btn" href="${ROOT}estado/?f=${encodeURIComponent(folio)}&c=${encodeURIComponent(correo)}">Ver mi trámite</a>
+        <button class="btn secundario" onclick="window.print()">Imprimir o guardar este acuse</button>
+        ${modo === 'seccion' ? `<a class="btn secundario" href="${ROOT}seccion/">Volver al portal de la Sección</a>` : ''}
+      </div>
+    </div>`;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function idSeccion(slug) { const { data } = await sb.from('secciones').select('id').eq('slug', slug).single(); return data.id; }
+</script>
+</body>
+</html>

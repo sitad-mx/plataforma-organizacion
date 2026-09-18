@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido angosto" style="max-width:480px">
+  <h1>Entrar</h1>
+  <p class="muted">Acceso para la Secretaría de Organización de las Secciones, el Comité Ejecutivo Nacional y el Secretario General.</p>
+  <form id="forma" class="tarjeta">
+    <div class="campo"><label for="correo">Correo</label><input type="email" id="correo" required autocomplete="username"></div>
+    <div class="campo"><label for="clave">Contraseña</label><input type="password" id="clave" required autocomplete="current-password"></div>
+    <div id="error" class="aviso error oculto"></div>
+    <div class="acciones"><button class="btn" type="submit" id="entrar">Entrar</button></div>
+    <p class="small muted mt-2">¿Sin acceso o sin contraseña? Escribe a <a href="mailto:sitadorganizacion@gmail.com">sitadorganizacion@gmail.com</a>. Los accesos los otorga la Secretaría de Organización del CEN.</p>
+  </form>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, esc, ocupado, param, armazon, perfil, destinoPorRol, ROOT } from '../assets/app.js';
+const p = await armazon({ titulo: 'Acceso' });
+if (p && p.rol) location.href = param('ir') || destinoPorRol(p.rol);
+$('#forma').onsubmit = async e => {
+  e.preventDefault(); const btn = $('#entrar'); ocupado(btn, true, 'Entrando…'); $('#error').classList.add('oculto');
+  const { error } = await sb.auth.signInWithPassword({ email: $('#correo').value.trim().toLowerCase(), password: $('#clave').value });
+  if (error) { ocupado(btn, false); $('#error').textContent = 'No pudimos entrar con esos datos. Revisa el correo y la contraseña.'; $('#error').classList.remove('oculto'); return; }
+  const q = await perfil(true);
+  if (!q.rol) { ocupado(btn, false); $('#error').textContent = 'Tu usuario existe pero no tiene un rol asignado todavía. Escribe a la Secretaría de Organización.'; $('#error').classList.remove('oculto'); return; }
+  location.href = param('ir') || destinoPorRol(q.rol);
+};
+</script>
+</body>
+</html>

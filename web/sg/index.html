@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autorizaciones · Secretario General · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido medio">
+  <p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Secretaría General</p>
+  <h1>Autorización de altas en el Padrón</h1>
+  <p class="muted">La Secretaría de Organización dictaminó favorables estas solicitudes. Al autorizar, Organización tiene dos días hábiles para ejecutar el alta y expedir la credencial.</p>
+  <div class="pestanas"><button class="activa" data-p="pendientes">Pendientes</button><button data-p="historial">Autorizadas</button></div>
+  <section id="panel"><p class="cargando">Cargando…</p></section>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, $$, esc, toast, armazon, requerirRol, fecha, fechaLarga, hoy, ROOT } from '../assets/app.js';
+const p = await requerirRol(['sg', 'cen_organizacion', 'cen_lectura']); if (!p) throw new Error('sin acceso');
+await armazon({ titulo: 'Secretaría General', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'sg' });
+const esSG = p.rol === 'sg'; const panel = $('#panel');
+$$('.pestanas button').forEach(b => b.onclick = () => { $$('.pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); b.dataset.p === 'pendientes' ? pendientes() : historial(); });
+pendientes();
+
+async function pendientes() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>';
+  const { data, error } = await sb.from('v_solicitudes').select('id, folio, nombre_completo, seccion, fecha_recepcion, fecha_dictamen, fecha_envio_sg, puesto, centro_trabajo, curp, documentos_completos, es_confianza, duplicado, notas').eq('estado', 'Enviada al SG').order('fecha_envio_sg');
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  if (!data.length) { panel.innerHTML = '<div class="tarjeta vacio">No hay solicitudes pendientes de autorización.</div>'; return; }
+  panel.innerHTML = `${esSG ? `<div class="acciones" style="justify-content:flex-end"><button class="btn" id="todas">Autorizar las ${data.length} pendientes</button></div>` : ''}
+    ${data.map(s => `<div class="tarjeta" id="s-${s.id}">
+      <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+        <div><b>${esc(s.folio)}</b> · ${esc(s.nombre_completo)}<br><span class="small muted">${esc(s.seccion)} · ${esc(s.puesto || '')} · ${esc(s.centro_trabajo || '')}${s.curp ? ' · CURP ' + esc(s.curp) : ''}</span><br><span class="small muted">Recibida ${fecha(s.fecha_recepcion)} · Dictamen favorable ${fecha(s.fecha_dictamen)} · Remitida ${fecha(s.fecha_envio_sg)}</span>
+          ${(!s.documentos_completos || s.es_confianza || s.duplicado) ? `<div class="aviso atencion small mt-1">Organización dictaminó con ${[!s.documentos_completos && 'expediente incompleto', s.es_confianza && 'declaración de confianza', s.duplicado && 'posible duplicado'].filter(Boolean).join(', ')}. Revisa el dictamen.</div>` : ''}</div>
+        <div class="acciones" style="margin:0;align-items:flex-start"><a class="btn secundario chico" href="${ROOT}documento.html?tipo=dictamen&id=${s.id}" target="_blank">Ver dictamen</a>
+          ${esSG ? `<button class="btn chico verde" data-aut="${s.id}">Autorizar</button><button class="btn discreto chico" data-dev="${s.id}">Devolver</button>` : ''}</div>
+      </div></div>`).join('')}`;
+  $$('[data-aut]').forEach(b => b.onclick = () => autorizar([b.dataset.aut]));
+  $$('[data-dev]').forEach(b => b.onclick = () => devolver(b.dataset.dev, data.find(x => x.id === b.dataset.dev)));
+  const t = $('#todas'); if (t) t.onclick = () => { if (confirm(`Autorizar el alta de las ${data.length} solicitudes listadas. ¿Confirmas?`)) autorizar(data.map(x => x.id)); };
+}
+async function autorizar(ids) {
+  const ref = `Autorización del SG en plataforma · ${fechaLarga(hoy())}`;
+  let ok = 0, err = 0;
+  for (const id of ids) { const { error } = await sb.from('solicitudes_afiliacion').update({ fecha_autorizacion_sg: hoy(), autorizacion_sg_ref: ref }).eq('id', id); if (error) { err++; toast(error.message, 'error'); } else ok++; }
+  toast(`${ok} alta(s) autorizada(s)${err ? `, ${err} con error` : ''}. Organización ejecuta el alta en dos días hábiles.`, err ? 'error' : 'ok'); pendientes();
+}
+async function devolver(id, s) {
+  const obs = prompt(`Devolver ${s.folio} a la Secretaría de Organización sin autorizar. Escribe la observación:`); if (!obs) return;
+  const { error } = await sb.from('solicitudes_afiliacion').update({ estado: 'Dictaminada favorable', fecha_envio_sg: null, notas: ((s.notas || '') + `\n[SG ${hoy()}] Devuelta sin autorizar: ${obs}`).trim() }).eq('id', id);
+  if (error) toast(error.message, 'error'); else { toast('Devuelta a Organización.', 'ok'); pendientes(); }
+}
+async function historial() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>';
+  const { data, error } = await sb.from('v_solicitudes').select('id, folio, nombre_completo, seccion, fecha_autorizacion_sg, autorizacion_sg_ref, estado, fecha_ejecucion_padron').not('fecha_autorizacion_sg', 'is', null).order('fecha_autorizacion_sg', { ascending: false }).limit(200);
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  panel.innerHTML = `<div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Folio</th><th>Persona</th><th>Sección</th><th>Autorizada</th><th>Estado</th></tr></thead><tbody>${data.length ? data.map(s => `<tr><td>${esc(s.folio)}</td><td>${esc(s.nombre_completo)}</td><td>${esc(s.seccion)}</td><td>${fecha(s.fecha_autorizacion_sg)}<br><span class="tiny muted">${esc(s.autorizacion_sg_ref || '')}</span></td><td><span class="etiqueta ${s.estado === 'Ejecutada en padrón' ? 'verde' : 'amarillo'}">${esc(s.estado)}</span>${s.fecha_ejecucion_padron ? `<br><span class="tiny muted">alta ${fecha(s.fecha_ejecucion_padron)}</span>` : ''}</td></tr>`).join('') : '<tr><td colspan="5" class="vacio">Todavía no hay autorizaciones.</td></tr>'}</tbody></table></div>`;
+}
+</script>
+</body>
+</html>

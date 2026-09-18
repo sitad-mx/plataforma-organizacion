@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portal de la Sección · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
+    <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Secretaría de Organización de la Sección</p><h1 id="titulo">Sección</h1></div>
+    <div id="liga" class="small"></div>
+  </div>
+  <div class="pestanas" id="pestanas"><button data-p="solicitudes" class="activa">Solicitudes</button><button data-p="padron">Padrón adscrito</button><button data-p="directorio">Directorio</button><button data-p="guia">Cómo se hace</button></div>
+  <section id="panel"><p class="cargando">Cargando…</p></section>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, $$, esc, toast, armazon, requerirRol, fecha, fechaLarga, ESTADO_INFO, ROOT, CFG } from '../assets/app.js';
+const p = await requerirRol(['seccion_organizacion', 'seccion_sg']); if (!p) throw new Error('sin acceso');
+await armazon({ titulo: p.secciones ? p.secciones.denominacion : 'Sección' });
+const sec = p.secciones; const esOrg = p.rol === 'seccion_organizacion'; const panel = $('#panel');
+$('#titulo').textContent = sec ? sec.denominacion : 'Sección';
+const liga = sec && sec.numero ? `${ROOT}afiliate/?s=${sec.slug}` : '';
+$('#liga').innerHTML = liga ? `<b>Liga de afiliación de tu Sección:</b><br><code>${liga}</code> <button class="btn discreto chico" id="copiar">Copiar</button>` : '<span class="muted">Tu Sección aún no tiene número asignado; la liga de afiliación se activa cuando lo tenga.</span>';
+const c = $('#copiar'); if (c) c.onclick = () => navigator.clipboard.writeText(liga).then(() => toast('Liga copiada. Compártela a los trabajadores de tu Sección.', 'ok'));
+const P = { solicitudes, padron, directorio, guia };
+$$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); P[b.dataset.p](); });
+solicitudes();
+
+async function solicitudes() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>';
+  const { data, error } = await sb.from('v_solicitudes').select('id, folio, nombre_completo, correo, fecha_recepcion, estado, documentos_completos, fecha_prevencion, limite_subsanacion, canal, fecha_ejecucion_padron').order('fecha_recepcion', { ascending: false });
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  panel.innerHTML = `<div class="acciones" style="margin:0 0 1rem">${esOrg && liga ? `<a class="btn" href="${liga}">Registrar una solicitud recibida en la Sección</a>` : ''}<span class="small muted">${data.length} solicitudes · ${data.filter(s => !['Ejecutada en padrón','Dictaminada desfavorable','Desistida'].includes(s.estado)).length} en trámite</span></div>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Folio</th><th>Persona</th><th>Recibida</th><th>Estado</th><th>Expediente</th><th>Canal</th></tr></thead><tbody>${data.length ? data.map(s => `<tr><td><b>${esc(s.folio)}</b></td><td>${esc(s.nombre_completo)}<br><span class="tiny muted">${esc(s.correo)}</span></td><td>${fecha(s.fecha_recepcion)}</td><td><span class="etiqueta ${(ESTADO_INFO[s.estado] || {}).etiqueta || ''}">${esc(s.estado)}</span>${s.estado === 'Prevenida' ? `<br><span class="tiny" style="color:var(--ambar)">Subsanar antes del ${fecha(s.limite_subsanacion)}</span>` : ''}</td><td>${s.documentos_completos ? '<span class="etiqueta verde">Completo</span>' : '<span class="etiqueta amarillo">Incompleto</span>'}</td><td class="small muted">${s.canal === 'publico' ? 'Liga pública' : 'Sección'}</td></tr>`).join('') : '<tr><td colspan="6" class="vacio">Todavía no hay solicitudes de tu Sección.</td></tr>'}</tbody></table></div>
+    <p class="small muted mt-2">Para completar el expediente de una solicitud, la persona entra a <a href="${ROOT}estado/">Consultar mi trámite</a> con su folio y su correo. La Sección puede orientarla; el dictamen lo emite la Secretaría de Organización del CEN.</p>`;
+}
+async function padron() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>';
+  const { data, error } = await sb.from('v_padron').select('numero_afiliacion, folio, nombre_completo, fecha_alta, estatus, puesto, centro_trabajo').order('numero_afiliacion');
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  panel.innerHTML = `<p class="small muted">Personas afiliadas adscritas a tu Sección según el Padrón de Afiliados (que lleva la Secretaría de Organización del CEN). Es un extracto de consulta.</p><div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Folio</th><th>Persona</th><th>Puesto · centro de trabajo</th><th>Alta</th><th>Estatus</th></tr></thead><tbody>${data.length ? data.map(x => `<tr><td class="num">${x.numero_afiliacion}</td><td>${esc(x.folio)}</td><td>${esc(x.nombre_completo)}</td><td class="small">${esc(x.puesto || '')} · ${esc(x.centro_trabajo || '')}</td><td>${fecha(x.fecha_alta)}</td><td><span class="etiqueta ${x.estatus === 'Activo' ? 'verde' : 'carbon'}">${esc(x.estatus)}</span></td></tr>`).join('') : '<tr><td colspan="6" class="vacio">Aún no hay personas afiliadas adscritas.</td></tr>'}</tbody></table></div>`;
+}
+async function directorio() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>';
+  const { data, error } = await sb.from('cargos_seccionales').select('id, cargo, persona_nombre, estatus, periodo_inicio, periodo_fin, telefono, correo, contacto_validado').order('created_at');
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  panel.innerHTML = `<p class="small muted">Comité Ejecutivo Seccional y Comisión Seccional de Vigilancia. ${esOrg ? 'Puedes corregir teléfono y correo; los cambios de persona en un cargo se hacen con un movimiento documentado ante la Secretaría de Organización del CEN.' : ''}</p>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Cargo</th><th>Persona</th><th>Estatus</th><th>Periodo</th><th>Teléfono</th><th>Correo</th>${esOrg ? '<th></th>' : ''}</tr></thead><tbody>${data.map(c => `<tr data-id="${c.id}"><td>${esc(c.cargo)}</td><td>${esc(c.persona_nombre || '—')}</td><td><span class="etiqueta ${c.estatus === 'Vigente' ? 'verde' : ''}">${esc(c.estatus)}</span>${c.contacto_validado === false ? '<br><span class="tiny" style="color:var(--ambar)">contacto pendiente de validar</span>' : ''}</td><td class="small">${c.periodo_inicio ? fecha(c.periodo_inicio) + ' – ' + fecha(c.periodo_fin) : '—'}</td><td>${esOrg ? `<input type="text" value="${esc(c.telefono || '')}" data-tel style="min-width:120px">` : esc(c.telefono || '')}</td><td>${esOrg ? `<input type="text" value="${esc(c.correo || '')}" data-correo style="min-width:180px">` : esc(c.correo || '')}</td>${esOrg ? '<td><button class="btn secundario chico" data-guardar>Guardar</button></td>' : ''}</tr>`).join('')}</tbody></table></div>`;
+  $$('[data-guardar]').forEach(b => b.onclick = async () => { const tr = b.closest('tr'); const { error } = await sb.from('cargos_seccionales').update({ telefono: tr.querySelector('[data-tel]').value || null, correo: tr.querySelector('[data-correo]').value || null, fecha_actualizacion: new Date().toISOString().slice(0, 10) }).eq('id', tr.dataset.id); if (error) toast(error.message, 'error'); else { toast('Contacto actualizado; queda pendiente de validar por el CEN.', 'ok'); directorio(); } });
+}
+function guia() {
+  panel.innerHTML = `<div class="tarjeta" style="max-width:820px">
+    <h2>Cómo afilia tu Sección</h2>
+    <ol>
+      <li><b>Comparte la liga de afiliación</b> de tu Sección a los trabajadores. Con ella cada persona llena su solicitud y sube sus cinco documentos; queda ligada a tu Sección automáticamente.</li>
+      <li><b>O recibe la papelería tú</b> (en persona o por correo) y regístrala con el botón "Registrar una solicitud recibida en la Sección". Captura los datos tal como vienen en la solicitud firmada y sube los documentos.</li>
+      <li><b>Cinco documentos, ninguno más:</b> identificación oficial (INE) por ambos lados, constancia de la CURP, solicitud AF-01 firmada de puño y letra, cédula de afiliación (Anexo 23) y aviso de privacidad firmado. No se pide recibo de nómina ni constancia fiscal.</li>
+      <li><b>La Secretaría de Organización del CEN revisa y dictamina</b> en un máximo de diez días hábiles. Si falta algo, previene una sola vez; la persona (o tú) sube lo faltante en "Consultar mi trámite".</li>
+      <li><b>El Secretario General autoriza el alta.</b> Organización registra a la persona en el Padrón y expide constancia y credencial. Aquí ves el avance de cada folio y tu padrón adscrito.</li>
+    </ol>
+    <p class="small muted">Dudas: ${CFG.CORREO_ORGANIZACION}</p></div>`;
+}
+</script>
+</body>
+</html>

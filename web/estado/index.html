@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consultar mi trámite · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+
+<main class="contenido angosto">
+  <h1>Consultar mi trámite</h1>
+  <p class="muted">Escribe el folio que recibiste (por ejemplo SITAD-21-000012) y el correo con el que hiciste tu solicitud.</p>
+  <form id="forma" class="tarjeta">
+    <div class="fila">
+      <div class="campo"><label for="folio">Folio</label><input type="text" id="folio" required style="text-transform:uppercase" placeholder="SITAD-__-______"></div>
+      <div class="campo"><label for="correo">Correo electrónico</label><input type="email" id="correo" required></div>
+    </div>
+    <div class="acciones"><button class="btn" type="submit" id="buscar">Consultar</button></div>
+  </form>
+  <div id="resultado" class="mt-2"></div>
+</main>
+
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, esc, toast, ocupado, param, armazon, DOCS, DOC_NOMBRE, ESTADO_INFO, fecha, fechaLarga, subirArchivo, validarArchivo, rutaDocumento, ROOT, CFG } from '../assets/app.js';
+await armazon({ titulo: 'Consulta de trámite' });
+const res = $('#resultado');
+if (param('f')) $('#folio').value = param('f'); if (param('c')) $('#correo').value = param('c');
+$('#forma').onsubmit = e => { e.preventDefault(); consultar(); };
+if (param('f') && param('c')) consultar();
+
+async function consultar() {
+  const folio = $('#folio').value.trim().toUpperCase(), correo = $('#correo').value.trim().toLowerCase();
+  const btn = $('#buscar'); ocupado(btn, true, 'Buscando…'); res.innerHTML = '<p class="cargando">Buscando…</p>';
+  const [{ data: s, error }, { data: docs }] = await Promise.all([
+    sb.rpc('consultar_solicitud', { p_folio: folio, p_correo: correo }),
+    sb.rpc('documentos_publicos', { p_folio: folio, p_correo: correo }),
+  ]);
+  ocupado(btn, false);
+  if (error || !s || !s.length) { res.innerHTML = `<div class="aviso error"><b>No encontramos esa solicitud.</b> Revisa que el folio y el correo sean exactamente los que usaste. Si el problema sigue, escribe a <a href="mailto:${CFG.CORREO_ORGANIZACION}">${CFG.CORREO_ORGANIZACION}</a> con tu nombre completo.</div>`; return; }
+  const x = s[0]; const info = ESTADO_INFO[x.estado] || {};
+  const tienen = new Set((docs || []).map(d => d.tipo)); const slug = docs && docs[0] ? docs[0].slug : null;
+  const faltan = DOCS.filter(d => !tienen.has(d.tipo));
+  const pasos = [
+    { t: 'Solicitud recibida', f: x.fecha_recepcion, ok: true },
+    ...(x.fecha_prevencion ? [{ t: 'Prevención: faltó documentación', f: x.fecha_prevencion, ok: true, extra: x.limite_subsanacion ? `Plazo para subsanar: ${fechaLarga(x.limite_subsanacion)}` : '' }] : []),
+    { t: x.sentido === 'Desfavorable' ? 'Dictamen desfavorable' : 'Dictamen de la Secretaría de Organización', f: x.fecha_dictamen, ok: !!x.fecha_dictamen },
+    { t: 'Autorización del Secretario General', f: null, ok: ['Autorizada', 'Ejecutada en padrón'].includes(x.estado) },
+    { t: 'Alta en el Padrón de Afiliados', f: x.fecha_alta, ok: !!x.fecha_alta },
+  ];
+  res.innerHTML = `
+    <div class="tarjeta">
+      <p class="small muted mb-0">${esc(x.seccion)}</p>
+      <h2>Folio ${esc(x.folio)} <span class="etiqueta ${info.etiqueta || ''}">${esc(x.estado)}</span></h2>
+      <p>${esc(info.persona || '')}</p>
+      <ol class="linea-tiempo mt-2">${pasos.map(p => `<li class="${p.ok ? 'hecho' : ''}"><b>${esc(p.t)}</b><span>${p.f ? fechaLarga(p.f) : (p.ok ? 'Hecho' : 'Pendiente')}${p.extra ? ' · ' + esc(p.extra) : ''}</span></li>`).join('')}</ol>
+    </div>
+    <div class="tarjeta">
+      <h3>Tu expediente (${tienen.size} de 5 documentos)</h3>
+      <ul class="doc-lista">${DOCS.map(d => { const doc = (docs || []).find(q => q.tipo === d.tipo); return `<li><span class="punto ${doc ? (doc.validado === false ? 'amarillo' : 'verde') : 'rojo'}"></span><span class="nombre">${esc(d.nombre)}${doc && doc.observacion ? `<br><span class="small" style="color:var(--ambar)">Observación de la Mesa de Registro: ${esc(doc.observacion)}</span>` : ''}</span><span class="small muted">${doc ? 'Recibido' : 'Falta'}</span></li>`; }).join('')}</ul>
+      ${['Recibida', 'Prevenida'].includes(x.estado) && slug ? `
+        <h3 class="mt-3">Subir o reemplazar un documento</h3>
+        <p class="small muted">PDF, JPG o PNG, máximo 5 MB. Si subes un documento que ya estaba, el nuevo sustituye al anterior.</p>
+        <div class="fila">
+          <div class="campo"><label for="tipo">Documento</label><select id="tipo">${DOCS.map(d => `<option value="${d.tipo}" ${!tienen.has(d.tipo) ? 'selected' : ''}>${esc(d.nombre)}</option>`).join('')}</select></div>
+          <div class="campo"><label for="archivo">Archivo</label><input type="file" id="archivo" accept="application/pdf,image/jpeg,image/png"></div>
+        </div>
+        <div class="acciones"><button class="btn" id="subir">Subir documento</button></div>` : ''}
+    </div>`;
+  const b = $('#subir'); if (b) b.onclick = () => subir(folio, correo, slug);
+}
+
+async function subir(folio, correo, slug) {
+  const f = $('#archivo').files[0]; const err = validarArchivo(f); if (err) return toast(err, 'error');
+  const tipo = $('#tipo').value; const btn = $('#subir'); ocupado(btn, true, 'Subiendo…');
+  try {
+    const ruta = rutaDocumento(slug, folio, tipo, f.name) .replace(/(\.[a-z0-9]+)$/i, `-${Date.now()}$1`);
+    await subirArchivo(ruta, f);
+    const { error } = await sb.rpc('registrar_documento_publico', { p_folio: folio, p_correo: correo, p_tipo: tipo, p_archivo_url: ruta, p_nombre_archivo: f.name });
+    if (error) throw error;
+    toast('Documento recibido. Gracias.', 'ok'); consultar();
+  } catch (e) { ocupado(btn, false); toast('No se pudo subir: ' + (e.message || e), 'error'); }
+}
+</script>
+</body>
+</html>

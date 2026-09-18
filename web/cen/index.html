@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CEN · Organización · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
+    <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Comité Ejecutivo Nacional</p><h1>Secretaría de Organización</h1></div>
+    <div id="resumen" class="small muted"></div>
+  </div>
+  <div class="pestanas" id="pestanas">
+    <button data-p="solicitudes" class="activa">Solicitudes</button>
+    <button data-p="padron">Padrón</button>
+    <button data-p="secciones">Secciones</button>
+    <button data-p="tablero">Tablero</button>
+    <button data-p="trimestre">Relación trimestral</button>
+  </div>
+  <section id="panel"><p class="cargando">Cargando…</p></section>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, hoy, ESTADO_INFO, SEMAFORO_TXT, correoAlSG, mailto, ROOT, CFG } from '../assets/app.js';
+const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg']); if (!p) throw new Error('sin acceso');
+await armazon({ titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
+const panel = $('#panel'); const esOrg = p.rol === 'cen_organizacion';
+const PANELES = { solicitudes, padron, secciones, tablero, trimestre };
+$$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); history.replaceState(null, '', '?p=' + b.dataset.p); PANELES[b.dataset.p](); });
+const inicial = param('p') && PANELES[param('p')] ? param('p') : 'solicitudes';
+$$('#pestanas button').forEach(b => b.classList.toggle('activa', b.dataset.p === inicial)); PANELES[inicial]();
+
+// ===== Solicitudes =====
+let filtro = { alcance: 'activas', texto: '', seccion: '' };
+async function solicitudes() {
+  panel.innerHTML = '<p class="cargando">Cargando solicitudes…</p>';
+  const { data, error } = await sb.from('v_solicitudes').select('id, folio, nombre_completo, seccion, seccion_slug, fecha_recepcion, estado, semaforo, fuera_de_plazo, dias_para_dictamen, dias_para_ejecutar, limite_dictamen, canal, duplicado, es_confianza, documentos_completos, fecha_dictamen, sentido, fecha_envio_sg, fecha_autorizacion_sg').order('fecha_recepcion', { ascending: false }).limit(500);
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  const secciones = [...new Set(data.map(s => s.seccion))].sort();
+  const activas = data.filter(s => !['Ejecutada en padrón', 'Dictaminada desfavorable', 'Desistida'].includes(s.estado));
+  $('#resumen').innerHTML = `${activas.length} en trámite · ${activas.filter(s => s.fuera_de_plazo).length} fuera de plazo · ${activas.filter(s => s.estado === 'Enviada al SG').length} con el SG`;
+  const favorablesSinEnviar = data.filter(s => s.estado === 'Dictaminada favorable');
+  const enviadas = data.filter(s => s.estado === 'Enviada al SG');
+  panel.innerHTML = `
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
+      <select id="f-alcance"><option value="activas">En trámite</option><option value="vencidas">Fuera de plazo</option><option value="sg">Con el Secretario General</option><option value="autorizadas">Autorizadas, sin alta</option><option value="todas">Todas</option></select>
+      <select id="f-seccion"><option value="">Todas las secciones</option>${secciones.map(s => `<option>${esc(s)}</option>`).join('')}</select>
+      <input type="text" id="f-texto" placeholder="Buscar por folio o nombre" style="max-width:260px">
+      ${esOrg ? `<a class="btn secundario chico" href="${ROOT}afiliate/" style="margin-left:auto">Registrar solicitud recibida por correo</a>` : ''}
+    </div>
+    ${enviadas.length ? `<div class="aviso atencion small"><b>${enviadas.length} dictamen(es) favorable(s) esperan la autorización del Secretario General.</b> <a href="${mailto(await correoSG(), correoAlSG(enviadas).asunto, correoAlSG(enviadas).cuerpo)}">Recordárselo por correo</a> · <a href="${ROOT}sg/">Ver bandeja de autorizaciones</a></div>` : ''}
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th></th><th>Folio</th><th>Persona</th><th>Sección</th><th>Recibida</th><th>Estado</th><th>Plazo</th><th>Canal</th></tr></thead><tbody id="filas"></tbody></table></div>`;
+  $('#f-alcance').value = filtro.alcance; $('#f-seccion').value = filtro.seccion; $('#f-texto').value = filtro.texto;
+  const pintar = () => {
+    filtro = { alcance: $('#f-alcance').value, seccion: $('#f-seccion').value, texto: $('#f-texto').value.toLowerCase() };
+    let lista = data;
+    if (filtro.alcance === 'activas') lista = activas;
+    if (filtro.alcance === 'vencidas') lista = activas.filter(s => s.fuera_de_plazo);
+    if (filtro.alcance === 'sg') lista = enviadas;
+    if (filtro.alcance === 'autorizadas') lista = data.filter(s => s.estado === 'Autorizada');
+    if (filtro.seccion) lista = lista.filter(s => s.seccion === filtro.seccion);
+    if (filtro.texto) lista = lista.filter(s => (s.folio + ' ' + s.nombre_completo).toLowerCase().includes(filtro.texto));
+    $('#filas').innerHTML = lista.length ? lista.map(s => `<tr class="clic" data-id="${s.id}">
+      <td title="${esc(SEMAFORO_TXT[s.semaforo] || '')}"><span class="punto ${s.semaforo}"></span></td>
+      <td><b>${esc(s.folio)}</b></td>
+      <td>${esc(s.nombre_completo)}${s.es_confianza ? ' <span class="etiqueta rojo">confianza</span>' : ''}${s.duplicado ? ' <span class="etiqueta rojo">duplicado</span>' : ''}${!s.documentos_completos && !['Ejecutada en padrón','Dictaminada desfavorable','Desistida'].includes(s.estado) ? ' <span class="etiqueta amarillo">expediente incompleto</span>' : ''}</td>
+      <td>${esc(s.seccion)}</td><td>${fecha(s.fecha_recepcion)}</td>
+      <td><span class="etiqueta ${(ESTADO_INFO[s.estado] || {}).etiqueta || ''}">${esc(s.estado)}</span></td>
+      <td>${plazo(s)}</td><td class="small muted">${s.canal === 'publico' ? 'Liga pública' : 'Sección'}</td></tr>`).join('') : '<tr><td colspan="8" class="vacio">No hay solicitudes con ese filtro.</td></tr>';
+    $$('#filas tr.clic').forEach(tr => tr.onclick = () => location.href = 'solicitud.html?id=' + tr.dataset.id);
+  };
+  ['f-alcance', 'f-seccion'].forEach(id => $('#' + id).onchange = pintar); $('#f-texto').oninput = pintar; pintar();
+}
+function plazo(s) {
+  if (s.fuera_de_plazo) return '<span class="etiqueta rojo">Fuera de plazo</span>';
+  if (s.dias_para_dictamen != null) return s.dias_para_dictamen <= 2 ? `<span class="etiqueta amarillo">Dictaminar en ${s.dias_para_dictamen} día(s)</span>` : `<span class="small muted">Dictamen: ${fecha(s.limite_dictamen)}</span>`;
+  if (s.dias_para_ejecutar != null) return `<span class="etiqueta ${s.dias_para_ejecutar <= 1 ? 'amarillo' : ''}">Alta en ${s.dias_para_ejecutar} día(s)</span>`;
+  if (s.estado === 'Prevenida') return '<span class="small muted">Esperando subsanación</span>';
+  if (s.estado === 'Enviada al SG') return `<span class="small muted">Con el SG desde ${fecha(s.fecha_envio_sg)}</span>`;
+  return '';
+}
+async function correoSG() { const { data } = await sb.from('usuarios_roles').select('email').eq('rol', 'sg').eq('activo', true).not('email', 'like', '%@sitad.test').limit(1); return data && data[0] ? data[0].email : ''; }
+
+// ===== Padrón =====
+async function padron() {
+  panel.innerHTML = '<p class="cargando">Cargando padrón…</p>';
+  const { data, error } = await sb.from('v_padron').select('id, numero_afiliacion, folio, nombre_completo, curp, seccion, fecha_alta, estatus, fecha_baja, causa_baja, correo').order('numero_afiliacion');
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  panel.innerHTML = `
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem"><input type="text" id="p-texto" placeholder="Buscar por nombre, folio o CURP" style="max-width:300px"><span class="small muted">${data.filter(x => x.estatus === 'Activo').length} activos · ${data.length} en total</span><button class="btn secundario chico" id="csv" style="margin-left:auto">Descargar CSV</button></div>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Folio</th><th>Persona</th><th>CURP</th><th>Sección</th><th>Alta</th><th>Estatus</th><th></th></tr></thead><tbody id="p-filas"></tbody></table></div>`;
+  const pintar = () => { const t = $('#p-texto').value.toLowerCase(); const l = data.filter(x => !t || (x.nombre_completo + x.folio + (x.curp || '')).toLowerCase().includes(t));
+    $('#p-filas').innerHTML = l.length ? l.map(x => `<tr><td class="num">${x.numero_afiliacion}</td><td>${esc(x.folio)}</td><td>${esc(x.nombre_completo)}</td><td class="small">${esc(x.curp || '')}</td><td>${esc(x.seccion)}</td><td>${fecha(x.fecha_alta)}</td><td><span class="etiqueta ${x.estatus === 'Activo' ? 'verde' : x.estatus === 'Baja' ? 'carbon' : 'amarillo'}">${esc(x.estatus)}</span>${x.fecha_baja ? `<br><span class="tiny muted">${fecha(x.fecha_baja)} · ${esc(x.causa_baja)}</span>` : ''}</td>
+      <td class="small"><a href="${ROOT}documento.html?tipo=constancia&id=${x.id}" target="_blank">Constancia</a> · <a href="${ROOT}documento.html?tipo=credencial&id=${x.id}" target="_blank">Credencial</a>${esOrg && x.estatus === 'Activo' ? ` · <a href="#" data-baja="${x.id}">Baja</a>` : ''}</td></tr>`).join('') : '<tr><td colspan="8" class="vacio">Sin registros.</td></tr>';
+    $$('[data-baja]').forEach(a => a.onclick = e => { e.preventDefault(); baja(data.find(x => x.id === a.dataset.baja)); }); };
+  $('#p-texto').oninput = pintar; pintar();
+  $('#csv').onclick = () => descargarCSV('padron-' + hoy() + '.csv', data, ['numero_afiliacion', 'folio', 'nombre_completo', 'curp', 'seccion', 'fecha_alta', 'estatus', 'fecha_baja', 'causa_baja']);
+}
+function baja(x) {
+  const causa = prompt(`Baja de ${x.nombre_completo} (${x.folio}).\nEscribe la causa exactamente: Separación voluntaria / Terminación de la relación de trabajo / Confianza / Expulsión / Fallecimiento`);
+  if (!causa) return;
+  const ref = prompt('Referencia de la autorización del Secretario General (oficio, fecha o "acuerdo verbal del dd/mm/aaaa"):'); if (ref === null) return;
+  sb.from('padron').update({ estatus: 'Baja', fecha_baja: hoy(), causa_baja: causa.trim(), notas: `Baja autorizada por el SG: ${ref}` }).eq('id', x.id).then(({ error }) => { if (error) toast('No se registró la baja: ' + error.message, 'error'); else { toast('Baja registrada.', 'ok'); padron(); } });
+}
+
+// ===== Secciones =====
+async function secciones() {
+  panel.innerHTML = '<p class="cargando">Cargando secciones…</p>';
+  const { data, error } = await sb.from('v_secciones').select('id, numero, denominacion, entidad, slug, situacion, semaforo, afiliados_adscritos, cargos_vigentes, ultimo_contacto, dias_sin_contacto, notas').order('denominacion');
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  panel.innerHTML = `<p class="small muted">La <b>liga de afiliación</b> de cada Sección constituida es la que se comparte a los trabajadores; solo las secciones con número la tienen activa.</p>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Sección</th><th>Situación</th><th>Semáforo</th><th>Afiliados</th><th>Cargos vigentes</th><th>Liga de afiliación</th></tr></thead><tbody>
+    ${data.map(s => `<tr><td class="num">${s.numero ?? '—'}</td><td><b>${esc(s.denominacion)}</b><br><span class="tiny muted">${esc((s.notas || '').slice(0, 110))}${(s.notas || '').length > 110 ? '…' : ''}</span></td><td><span class="etiqueta ${s.situacion === 'Constituida' ? 'verde' : ''}">${esc(s.situacion)}</span></td><td>${esc(s.semaforo)}</td><td class="num">${s.afiliados_adscritos}</td><td class="num">${s.cargos_vigentes} / 12</td>
+      <td class="small">${s.numero ? `<code>${ROOT}afiliate/?s=${s.slug}</code> <button class="btn discreto chico" data-copiar="${ROOT}afiliate/?s=${s.slug}">Copiar</button>` : '<span class="muted">Sin número: inactiva</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+  $$('[data-copiar]').forEach(b => b.onclick = () => navigator.clipboard.writeText(b.dataset.copiar).then(() => toast('Liga copiada.', 'ok')));
+}
+
+// ===== Tablero =====
+async function tablero() {
+  panel.innerHTML = '<p class="cargando">Calculando indicadores…</p>';
+  const { data, error } = await sb.from('v_tablero').select('*').order('bloque').order('orden');
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  const BLOQUES = { 1: 'Estructura territorial', 2: 'Funcionalidad seccional', 3: 'Afiliación', 4: 'Movimientos', 5: 'Incidencias', 6: 'Constituciones y asambleas' };
+  let html = `<p class="small muted">Fecha de corte: ${fechaLarga(hoy())}. Los indicadores se calculan solos a partir de la base.</p>`;
+  for (const b of Object.keys(BLOQUES)) { const items = data.filter(x => x.bloque == b); if (!items.length) continue;
+    html += `<div class="bloque-titulo">${b}. ${BLOQUES[b]}</div><div class="rejilla cuatro">${items.map(x => `<div class="cifra"><div class="valor ${/fuera de plazo|vencid|INTERVENCI/.test(x.indicador) && Number(x.valor) > 0 ? 'alerta' : ''}">${x.valor == null ? '—' : x.valor}${/\(%\)/.test(x.indicador) && x.valor != null ? '%' : ''}</div><div class="nombre" title="${esc(x.lectura)}">${esc(x.indicador.replace(' (%)', ''))}</div></div>`).join('')}</div>`; }
+  panel.innerHTML = html;
+}
+
+// ===== Relación trimestral =====
+async function trimestre() {
+  const d = new Date(); const q = Math.ceil((d.getMonth() + 1) / 3); const a = d.getFullYear();
+  const opciones = []; for (let i = 0; i < 6; i++) { let qq = q - i, aa = a; while (qq <= 0) { qq += 4; aa--; } opciones.push(`T${qq} ${aa}`); }
+  panel.innerHTML = `<p class="small muted">Altas y bajas del trimestre para la relación que la Secretaría remite a Asuntos Jurídicos dentro de los cinco días hábiles siguientes al cierre.</p>
+    <div style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem"><select id="t-sel">${opciones.map(o => `<option>${o}</option>`).join('')}</select><button class="btn secundario chico" id="t-csv">Descargar CSV</button></div><div id="t-res"></div>`;
+  const cargar = async () => {
+    const [t, anio] = $('#t-sel').value.split(' '); const n = parseInt(t.slice(1)); const ini = `${anio}-${String((n - 1) * 3 + 1).padStart(2, '0')}-01`; const fin = new Date(anio, n * 3, 0).toISOString().slice(0, 10);
+    const [{ data: altas }, { data: bajas }] = await Promise.all([
+      sb.from('v_padron').select('numero_afiliacion, folio, nombre_completo, curp, seccion, fecha_alta').gte('fecha_alta', ini).lte('fecha_alta', fin).order('fecha_alta'),
+      sb.from('v_padron').select('numero_afiliacion, folio, nombre_completo, curp, seccion, fecha_baja, causa_baja').gte('fecha_baja', ini).lte('fecha_baja', fin).order('fecha_baja'),
+    ]);
+    const tabla = (titulo, filas, cols) => `<h3 class="mt-2">${titulo} (${filas.length})</h3><div class="tabla-envoltura"><table class="tabla"><thead><tr>${cols.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>${filas.length ? filas.map(f => `<tr>${cols.map(c => `<td>${c[0].startsWith('fecha') ? fecha(f[c[0]]) : esc(f[c[0]] ?? '')}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="vacio">Ninguna.</td></tr>`}</tbody></table></div>`;
+    $('#t-res').innerHTML = `<p class="small muted">Periodo: ${fechaLarga(ini)} al ${fechaLarga(fin)}.</p>` + tabla('Altas', altas || [], [['numero_afiliacion', 'No.'], ['folio', 'Folio'], ['nombre_completo', 'Persona'], ['curp', 'CURP'], ['seccion', 'Sección'], ['fecha_alta', 'Alta']]) + tabla('Bajas', bajas || [], [['numero_afiliacion', 'No.'], ['folio', 'Folio'], ['nombre_completo', 'Persona'], ['seccion', 'Sección'], ['fecha_baja', 'Baja'], ['causa_baja', 'Causa']]);
+    $('#t-csv').onclick = () => descargarCSV(`relacion-${t}-${anio}.csv`, [...(altas || []).map(x => ({ movimiento: 'Alta', ...x })), ...(bajas || []).map(x => ({ movimiento: 'Baja', ...x }))], ['movimiento', 'numero_afiliacion', 'folio', 'nombre_completo', 'curp', 'seccion', 'fecha_alta', 'fecha_baja', 'causa_baja']);
+  };
+  $('#t-sel').onchange = cargar; cargar();
+}
+function descargarCSV(nombre, filas, cols) {
+  const linea = f => cols.map(c => `"${String(f[c] ?? '').replace(/"/g, '""')}"`).join(',');
+  const csv = '﻿' + cols.join(',') + '\n' + filas.map(linea).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = nombre; a.click();
+}
+</script>
+</body>
+</html>

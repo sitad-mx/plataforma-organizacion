@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documento · SITAD</title>
+<link rel="icon" href="assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<div class="barra-impresion"><button class="btn secundario chico" onclick="history.back()">Volver</button><button class="btn chico" onclick="window.print()">Imprimir / guardar PDF</button></div>
+<div id="doc"><p class="cargando" style="text-align:center">Preparando documento…</p></div>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, esc, param, armazon, requerirRol, fecha, fechaLarga, hoy, DOCS, DOC_CORTO, ROOT, CFG } from './assets/app.js';
+const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg']); if (!p) throw new Error('sin acceso');
+await armazon({ titulo: 'Documento' });
+const tipo = param('tipo'), id = param('id'); const doc = $('#doc');
+const membrete = (titulo) => `<div class="membrete"><img src="${ROOT}assets/sitad-logo-full.png" alt="SITAD"><div><b>${CFG.SINDICATO}</b><span>${CFG.SECRETARIA}</span><span class="lema">${CFG.LEMA}</span></div></div><h1>${titulo}</h1>`;
+const pie = (formato) => `<div class="pie-doc">${formato} · Secretaría de Organización del Comité Ejecutivo Nacional · Versión 1.0 (septiembre 2026). ${CFG.CLAUSULA_PIE}<br>${CFG.DOMICILIO}</div>`;
+const SI = (b) => b ? '☒ Sí ☐ No' : '☐ Sí ☒ No';
+
+if (tipo === 'dictamen' || tipo === 'prevencion') {
+  const [{ data: s }, { data: docs }] = await Promise.all([sb.from('v_solicitudes').select('*').eq('id', id).single(), sb.from('solicitud_documentos').select('tipo, validado, nombre_archivo').eq('solicitud_id', id)]);
+  if (!s) { doc.innerHTML = '<div class="aviso error">No se encontró la solicitud.</div>'; }
+  else if (tipo === 'dictamen') {
+    const tiene = t => (docs || []).some(d => d.tipo === t);
+    doc.innerHTML = `<div class="documento">${membrete('Dictamen de solicitud de afiliación')}
+      <p><b>Folio de la solicitud:</b> ${esc(s.folio)} · <b>Fecha del dictamen:</b> ${fecha(s.fecha_dictamen || hoy())} · <b>Sección que remite:</b> ${esc(s.seccion)}</p>
+      <h2>1. Datos de la persona solicitante</h2>
+      <table><tr><th style="width:42%">Nombre completo</th><td>${esc(s.nombre_completo)}</td></tr><tr><th>Centro de trabajo o adscripción</th><td>${esc(s.centro_trabajo || '')} · ${esc(s.puesto || '')}</td></tr><tr><th>Datos de contacto</th><td>${esc(s.correo)} · ${esc(s.telefono || '')}</td></tr><tr><th>Fecha de recepción de la solicitud</th><td>${fecha(s.fecha_recepcion)}</td></tr><tr><th>Fecha límite para dictaminar (10 días hábiles)</th><td>${fecha(s.limite_dictamen)}</td></tr><tr><th>Prevención formulada</th><td>${s.fecha_prevencion ? `☒ Sí, el ${fecha(s.fecha_prevencion)}; subsanada el ${fecha(s.fecha_subsanacion)}` : '☒ No'}</td></tr></table>
+      <h2>2. Verificación de requisitos</h2>
+      <table><tr><th>№</th><th>Requisito</th><th>Cumple</th><th>Documento o constancia</th></tr>
+        <tr><td>1</td><td>Es trabajador en activo de la Empresa</td><td>${SI(s.es_trabajador_activo && s.sentido !== 'Desfavorable')}</td><td>Declaración bajo protesta en la solicitud; datos de la relación de trabajo</td></tr>
+        <tr><td>2</td><td>Presentó solicitud por escrito o por el medio institucional habilitado, con nombre, datos de contacto y centro de trabajo o adscripción</td><td>${SI(true)}</td><td>${s.canal === 'publico' ? 'Medio institucional habilitado (plataforma)' : 'Solicitud escrita recibida por la Sección'} · ${tiene('solicitud_afiliacion_firmada') ? 'AF-01 firmada' : 'AF-01 pendiente'}</td></tr>
+        <tr><td>3</td><td>Manifestó expresamente la aceptación y cumplimiento del Estatuto</td><td>${SI(s.acepta_estatuto)}</td><td>Manifestación del ${fecha(s.acepta_estatuto_at)}</td></tr>
+        <tr><td>4</td><td>No tiene la calidad de trabajador de confianza legalmente excluido de la organización de los demás trabajadores</td><td>${SI(!s.es_confianza)}</td><td>Declaración en la solicitud; puesto declarado</td></tr></table>
+      <p class="small">Expediente: ${DOCS.map(d => (tiene(d.tipo) ? '☒ ' : '☐ ') + d.corto).join(' · ')}. No se exigen requisitos de afiliación distintos de los establecidos en el Estatuto.</p>
+      <h2>3. Dictamen</h2>
+      <p>${s.sentido === 'Favorable' ? '☒' : '☐'} <b>FAVORABLE.</b> La solicitud cumple los requisitos estatutarios. Se remite a la Secretaría General para que autorice el alta en el Padrón de Afiliados y se expida la credencial correspondiente. La persona quedará adscrita a la ${esc(s.seccion)}.</p>
+      <p>${s.sentido === 'Desfavorable' ? '☒' : '☐'} <b>DESFAVORABLE.</b> ${s.sentido === 'Desfavorable' ? 'La solicitud no cumple el requisito señalado, por las razones siguientes: ' + esc(s.motivo_desfavorable || '') : 'La solicitud no cumple el requisito señalado en el numeral ____ del apartado 2.'}</p>
+      <h2>4. Seguimiento (uso interno)</h2>
+      <table><tr><th style="width:60%">Remisión a la Secretaría General</th><td>${fecha(s.fecha_envio_sg)}</td></tr><tr><th>Autorización del Secretario General</th><td>${fecha(s.fecha_autorizacion_sg)}${s.autorizacion_sg_ref ? ' · ' + esc(s.autorizacion_sg_ref) : ''}</td></tr><tr><th>Límite para ejecutar en el Padrón (2 días hábiles)</th><td>${fecha(s.limite_ejecucion)}</td></tr><tr><th>Ejecución en el Padrón y apertura de expediente</th><td>${fecha(s.fecha_ejecucion_padron)}</td></tr><tr><th>Aviso a la Sección</th><td></td></tr></table>
+      <div class="firmas"><div>Titular de la Secretaría de Organización</div><div>Recibió — Secretaría General</div></div>
+      ${pie('Formato FT-001')}</div>`;
+  } else {
+    const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCION\]/.exec(s.notas || ''); const puntos = m ? m[1].trim().split('\n').filter(Boolean) : [];
+    doc.innerHTML = `<div class="documento">${membrete('Prevención de solicitud de afiliación')}
+      <p><b>Folio:</b> ${esc(s.folio)} · <b>Fecha:</b> ${fecha(s.fecha_prevencion)} · <b>Lugar:</b> ${CFG.LUGAR_EXPEDICION}</p>
+      <p><b>C. ${esc(s.nombre_completo.toUpperCase())}</b><br><b>Presente.</b></p>
+      <p>La Secretaría de Organización del Comité Ejecutivo Nacional del ${CFG.SINDICATO} recibió su solicitud de afiliación el ${fecha(s.fecha_recepcion)}. De su revisión se advierte que está incompleta en lo siguiente:</p>
+      <table><tr><th>№</th><th>Elemento faltante o por aclarar</th><th>Cómo subsanarlo</th></tr>${(puntos.length ? puntos : ['(sin detalle)']).map((x, i) => { const [a, b] = x.split(/;(.+)/); return `<tr><td>${i + 1}</td><td>${esc(a)}</td><td>${esc(b || 'Remítalo por el medio institucional indicando su folio.')}</td></tr>`; }).join('')}</table>
+      <p>Por lo anterior, y por una sola vez, se le previene para que <b>dentro de los diez días hábiles siguientes</b> a la recepción de este escrito, es decir, a más tardar el <b>${fecha(s.limite_subsanacion)}</b>, presente lo indicado por el medio siguiente: la plataforma de la Secretaría (${ROOT}estado/, con su folio y su correo) o el correo ${CFG.CORREO_ORGANIZACION}.</p>
+      <p>Recibida la subsanación, el plazo para emitir el dictamen se reanudará por los días hábiles que quedaron pendientes. Si la prevención no se atiende en tiempo, la solicitud se dictaminará con los elementos disponibles.</p>
+      <p>Para cualquier duda puede comunicarse con la Secretaría de Organización de su Sección o con esta Secretaría por el canal institucional indicado arriba.</p>
+      <div class="firmas"><div>Titular de la Secretaría de Organización del CEN</div><div>Acuse de recibo (nombre, fecha y firma)</div></div>
+      ${pie('Formato FT-002')}</div>`;
+  }
+} else if (tipo === 'constancia' || tipo === 'credencial') {
+  const { data: x } = await sb.from('v_padron').select('*').eq('id', id).single();
+  if (!x) { doc.innerHTML = '<div class="aviso error">No se encontró el registro del padrón.</div>'; }
+  else {
+    const { data: s } = x.solicitud_id ? await sb.from('solicitudes_afiliacion').select('fecha_recepcion').eq('id', x.solicitud_id).single() : { data: null };
+    const urlVerif = `${location.origin}${ROOT.replace(location.origin, '')}verificar/?t=${x.credencial_qr_token}`;
+    if (tipo === 'constancia') {
+      doc.innerHTML = `<div class="documento">${membrete('Constancia de Registro de Afiliación')}
+        <p><b>Número de constancia:</b> ${esc(x.folio)} · <b>Número de afiliación (Padrón):</b> ${x.numero_afiliacion}</p>
+        <h2>Constancia</h2>
+        <p>La Secretaría de Organización del Comité Ejecutivo Nacional hace constar que, con la autorización del Secretario General de fecha ${fecha(x.fecha_autorizacion_sg)}, la persona cuyos datos se describen a continuación <b>quedó registrada en el Padrón de Afiliados</b> del Sindicato, con adscripción a la Sección Sindical que se indica.</p>
+        <table><tr><th style="width:42%">Nombre de la persona afiliada</th><td>${esc(x.nombre_completo)}</td></tr><tr><th>Actividad o puesto</th><td>${esc(x.puesto || '')}</td></tr><tr><th>Empresa</th><td>REEDCAM</td></tr><tr><th>Sección Sindical de adscripción</th><td>${esc(x.seccion)}</td></tr><tr><th>Fecha de recepción de la solicitud</th><td>${fecha(s && s.fecha_recepcion)}</td></tr><tr><th>Fecha del dictamen favorable</th><td>${fecha(x.fecha_dictamen)}</td></tr><tr><th>Fecha de alta en el Padrón</th><td>${fecha(x.fecha_alta)}</td></tr></table>
+        <h2>Información para la persona afiliada</h2>
+        <ul><li>Sus derechos y obligaciones como persona afiliada son los que establece el Estatuto del Sindicato; su cumplimiento y ejercicio se realizan a través de su Sección Sindical y de los órganos nacionales.</li><li>Su credencial es el documento con el que acredita su calidad de persona afiliada ante el Sindicato y en sus asambleas.</li><li>Conozca los Documentos Básicos del Sindicato (Declaración de Principios, Programa de Acción y Estatuto) en la liga o código de esta constancia.</li><li>La cuota sindical ordinaria se cubre conforme a las indicaciones de la Secretaría de Finanzas.</li></ul>
+        <p class="small"><b>Ligas:</b> Documentos Básicos: ${CFG.LIGA_DOCUMENTOS_BASICOS || '______________________'} · Verificación de la credencial: ${esc(urlVerif)}</p>
+        <div class="firmas"><div>Titular de la Secretaría de Organización del Comité Ejecutivo Nacional</div><div style="border:0">Expedida en la Ciudad de México, el ${fechaLarga(hoy())}.</div></div>
+        ${pie('AF-05 · Paquete de Afiliación')}</div>`;
+    } else {
+      doc.innerHTML = `<div class="documento" style="max-width:520px;text-align:center">
+        <div class="credencial" style="text-align:left"><div class="banda"></div><img class="logo" src="${ROOT}assets/sitad-mark.png" alt=""><div class="tit">${CFG.SINDICATO_CORTO} · Persona afiliada</div><div class="nombre">${esc(x.nombre_completo)}</div><div class="dato">${esc(x.seccion)}</div><div class="dato small">${esc(x.puesto || '')}</div><canvas class="qr" id="qr"></canvas><div class="num">No. ${x.numero_afiliacion} · ${esc(x.folio)}<br>Alta ${fecha(x.fecha_alta)} · Verifica con el QR</div></div>
+        <p class="small muted">Verificación: ${esc(urlVerif)}<br>Clave: ${esc(x.credencial_qr_token)}</p>
+        <p class="tiny muted">${CFG.SINDICATO} · ${CFG.LEMA}</p></div>`;
+      const { toCanvas } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm');
+      toCanvas($('#qr'), urlVerif, { width: 78, margin: 0, color: { dark: '#171717' } });
+    }
+  }
+} else doc.innerHTML = '<div class="aviso error">Tipo de documento no válido.</div>';
+</script>
+</body>
+</html>
