@@ -23,7 +23,7 @@ const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas'
 const esSeccion = ['seccion_organizacion', 'seccion_sg'].includes(p.rol);
 await armazon(esSeccion ? { titulo: p.secciones ? p.secciones.denominacion : 'Sección' } : { titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
 $('#volver').href = esSeccion ? ROOT + 'seccion/' : ROOT + 'cen/';
-const esOrg = p.rol === 'cen_organizacion'; const puedeSubir = esOrg || p.rol === 'seccion_organizacion'; const id = param('id'); const vista = $('#vista');
+const esOrg = p.rol === 'cen_organizacion'; const esSecOrg = p.rol === 'seccion_organizacion'; const puedeSubir = esOrg || esSecOrg; const revisa = esOrg || esSecOrg; const id = param('id'); const vista = $('#vista');
 let s, docs, pad, correoSG = '', cfg = {}, segs = [];
 const dd = (k, val) => `<dt>${k}</dt><dd>${val == null || val === '' ? '—' : val}</dd>`;
 const enviar = (titulo, tel, correo, asunto, cuerpoCorreo, cuerpoWa, cc) => `<div class="envio"><span class="small"><b>${titulo}</b></span> <a class="btn wa chico" href="${whatsapp(tel, cuerpoWa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(correo, asunto, cuerpoCorreo, cc)}">Correo</a></div>`;
@@ -79,7 +79,7 @@ function render() {
             <div class="visor-cab"><span><span class="punto ${x ? (x.validado === false ? 'amarillo' : x.validado ? 'verde' : 'azul') : 'rojo'}"></span><b>${titulo}</b>${x ? `<span class="tiny muted"> · ${esc(x.nombre_archivo || '')} · ${fecha(x.created_at)}</span>` : ' <span class="tiny rojo">Falta</span>'}</span>
               <span>${x ? `<a href="#" class="btn discreto chico" data-abrir="${x.id}">Abrir en pestaña</a>` : ''}${puedeSubir && abierta ? `<label class="btn discreto chico" style="cursor:pointer">${x ? 'Reemplazar' : 'Subir'}<input type="file" class="oculto" data-subir="${d.tipo}" data-parte="${pt || ''}" accept="application/pdf,image/jpeg,image/png"></label>` : ''}</span></div>
             ${x ? `<div class="visor-cuerpo" data-ver="${x.id}"><span class="cargando" style="color:#ddd">Cargando documento…</span></div>` : ''}
-            ${x && esOrg && !cerrada ? `<div class="visor-pie"><button class="btn ${x.validado ? 'verde' : 'secundario'} chico" data-ok="${x.id}">${x.validado ? '✓ Correcto' : 'Marcar correcto'}</button><textarea data-obs="${x.id}" placeholder="Observación para la persona (qué está mal y cómo debe venir). Se muestra en su consulta y entra en la prevención.">${esc(x.observacion || '')}</textarea><button class="btn secundario chico" data-guardar-obs="${x.id}">Guardar observación</button></div>` : x && x.observacion ? `<div class="visor-pie small" style="color:var(--ambar)"><b>Observación:</b> ${esc(x.observacion)}</div>` : ''}
+            ${x && revisa && abierta ? `<div class="visor-pie"><button class="btn ${x.validado ? 'verde' : 'secundario'} chico" data-ok="${x.id}">${x.validado ? '✓ Correcto' : 'Marcar correcto'}</button><textarea data-obs="${x.id}" placeholder="Observación para la persona (qué está mal y cómo debe venir). Se muestra en su consulta y entra en el seguimiento.">${esc(x.observacion || '')}</textarea><button class="btn secundario chico" data-guardar-obs="${x.id}">Guardar observación</button></div>` : x && x.observacion ? `<div class="visor-pie small" style="color:var(--ambar)"><b>Observación:</b> ${esc(x.observacion)}</div>` : ''}
           </div>`; }).join('')).join('')}</div>
         ${s.expediente_url ? `<p class="small mt-2">Expediente definitivo en Drive: <a href="${esc(s.expediente_url)}" target="_blank">${esc(s.expediente_url)}</a></p>` : ''}
       </div>
@@ -104,8 +104,8 @@ function render() {
 
       <div class="tarjeta">
         <h3>Seguimiento a la persona <span class="tiny muted">(cuantas veces haga falta; la persona lo ve en su consulta)</span></h3>
-        ${segs.length ? `<ol class="linea-tiempo">${segs.map(g => { const pts = g.puntos || []; const wa = g.tipo === 'prevencion' ? waPrevencion(s, pts) : waSeguimiento(s, pts); const co = g.tipo === 'prevencion' ? correoPrevencion(s, pts) : correoSeguimiento(s, pts); return `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención formal' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'} · ${fechaLarga(g.fecha)}</b><span>${pts.length ? pts.map((x, i) => (i + 1) + '. ' + esc(x)).join('<br>') : esc(g.texto || '')}</span>${!esSeccion || true ? `<div class="mt-1"><a class="btn wa chico" href="${whatsapp(tel, wa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(s.correo, co.asunto, co.cuerpo)}">Correo</a></div>` : ''}</li>`; }).join('')}</ol>` : '<p class="small muted">Todavía no hay seguimientos.</p>'}
-        ${esOrg && abierta ? `<div class="acciones"><button class="btn secundario" id="a-seguimiento">Pedir corrección / dar seguimiento</button><span class="small muted">Se arma con lo que falta y tus observaciones; luego lo envías por WhatsApp o correo.</span></div>` : ''}
+        ${segs.length ? `<ol class="linea-tiempo">${segs.map(g => { const pts = g.puntos || []; const firma = g.origen === 'seccion' ? 'Secretaría de Organización · ' + s.seccion + ' · SITAD' : undefined; const wa = g.tipo === 'prevencion' ? waPrevencion(s, pts) : waSeguimiento(s, pts, firma); const co = g.tipo === 'prevencion' ? correoPrevencion(s, pts) : correoSeguimiento(s, pts, firma); return `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención formal' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'}${g.origen === 'seccion' ? ' (Sección)' : ' (CEN)'} · ${fechaLarga(g.fecha)}</b><span>${pts.length ? pts.map((x, i) => (i + 1) + '. ' + esc(x)).join('<br>') : esc(g.texto || '')}</span>${!esSeccion || true ? `<div class="mt-1"><a class="btn wa chico" href="${whatsapp(tel, wa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(s.correo, co.asunto, co.cuerpo)}">Correo</a></div>` : ''}</li>`; }).join('')}</ol>` : '<p class="small muted">Todavía no hay seguimientos.</p>'}
+        ${revisa && abierta ? `<div class="acciones"><button class="btn secundario" id="a-seguimiento">Pedir corrección / dar seguimiento</button><span class="small muted">Se arma con lo que falta y tus observaciones; luego lo envías por WhatsApp o correo.</span></div>` : ''}
       </div>
       ${esOrg ? `<div class="tarjeta">
         <h3>Mensaje para la persona <span class="tiny muted">(lo ve en "Consultar mi trámite")</span></h3>
@@ -154,10 +154,20 @@ function render() {
 function faltantesGuardados() { const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCION\]/.exec(s.notas || ''); return m ? m[1].trim().split('\n').filter(Boolean) : ['Ver oficio de prevención.']; }
 
 function accionesHtml(cerrada) {
-  if (!esOrg) return `<p class="small muted">${esSeccion ? 'Como Sección puedes ver el expediente, subir o reemplazar documentos por la persona y escribirle por WhatsApp o correo. El dictamen y el alta los lleva el CEN.' : 'Solo lectura.'}</p>`;
+  const abierta = ['Recibida', 'Prevenida', 'Subsanada'].includes(s.estado);
+  const pre = s.preautorizada_at ? `<div class="aviso ok small"><b>Preautorizada por la Sección</b> el ${fechaLarga(String(s.preautorizada_at).slice(0, 10))}${s.preautorizacion_nota ? ': ' + esc(s.preautorizacion_nota) : ''}.</div>` : (abierta ? `<div class="aviso atencion small"><b>En revisión seccional.</b> La Sección revisa el expediente, pide correcciones y preautoriza; entonces pasa al CEN.</div>` : '');
+  if (esSecOrg) {
+    const b = [];
+    if (abierta && !s.preautorizada_at) b.push(`<button class="btn verde" id="a-preautorizar">Preautorizar y enviar al CEN</button><p class="tiny muted">Solo cuando el expediente esté completo, cada documento revisado y sin observaciones pendientes.</p>`);
+    if (abierta && s.preautorizada_at) b.push(`<p class="small muted">Ya la preautorizaste; está con la Secretaría de Organización del CEN. Si detectas algo, escríbeles por el seguimiento.</p>`);
+    return pre + `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div><p class="small muted">Como Sección revisas el expediente, subes o reemplazas documentos por la persona, le pides correcciones por WhatsApp o correo y preautorizas. El dictamen y el alta los lleva el CEN.</p>`;
+  }
+  if (!esOrg) return pre + `<p class="small muted">Solo lectura.</p>`;
   const b = [];
   if (s.con_novedad) b.push(`<button class="btn secundario" id="a-revisado">Marcar como revisado (quitar novedad)</button>`);
-  if (cerrada) { b.push(`<p class="small muted">Trámite concluido.</p>`); return `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div>`; }
+  if (cerrada) { b.push(`<p class="small muted">Trámite concluido.</p>`); return pre + `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div>`; }
+  if (abierta && !s.preautorizada_at) b.push(`<button class="btn secundario" id="a-preautorizar">Preautorizar yo mismo (saltar la revisión seccional)</button>`);
+  if (abierta && s.preautorizada_at) b.push(`<button class="btn secundario" id="a-regresar">Regresar a la Sección (con motivo)</button>`);
   if (['Recibida', 'Subsanada'].includes(s.estado)) {
     if (!s.fecha_prevencion) b.push(`<button class="btn secundario" id="a-prevenir">Prevenir: pedir lo que falta (una sola vez)</button>`);
     b.push(`<button class="btn" id="a-favorable">Validar: dictamen FAVORABLE → al Secretario General</button>`, `<button class="btn secundario" id="a-desfavorable">Dictaminar desfavorable</button>`);
@@ -167,7 +177,7 @@ function accionesHtml(cerrada) {
   if (s.estado === 'Enviada al SG') b.push(`<p class="small muted">En espera de la autorización del Secretario General (desde ${fecha(s.fecha_envio_sg)}). Al autorizar, el alta en el Padrón es automática y aquí aparecen la constancia, el gafete y la carta de Finanzas listos para enviar. Si te la comunica por otro medio:</p><button class="btn secundario" id="a-autorizacion-externa">Registrar autorización recibida por otro medio</button>`);
   if (s.estado === 'Autorizada' && !pad) b.push(`<button class="btn verde" id="a-alta">Ejecutar alta en el Padrón</button>`);
   b.push(`<button class="btn discreto chico" id="a-desistir">Registrar desistimiento</button>`);
-  return `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div>`;
+  return pre + `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div>`;
 }
 
 async function cargarVisores() {
@@ -196,6 +206,8 @@ function enlazar(cerrada, abierta, req) {
   on('a-revisado', () => actualizar({ revisado_at: new Date().toISOString() }, 'Marcada como revisada.'));
   on('a-transporte', () => actualizar({ actividad_transporte: !s.actividad_transporte }, 'Marca de transporte actualizada; el expediente se recalculó.'));
   on('a-prevenir', () => prevenir(req)); on('a-seguimiento', () => seguimiento(req)); on('a-favorable', favorable);
+  on('a-preautorizar', async () => { if (!confirm(`Preautorizar la solicitud ${s.folio} de ${s.nombre_completo}: confirmas que revisaste cada documento, que están completos, legibles y firmados con tinta azul, y que los datos coinciden con la INE. Pasa a la Secretaría de Organización del CEN.`)) return; const nota = prompt('Nota para el CEN (opcional):', '') ?? ''; const { error } = await sb.rpc('preautorizar_seccion', { p_id: s.id, p_nota: nota }); if (error) return toast('No se pudo preautorizar: ' + error.message, 'error'); toast('Preautorizada. Ya está en la bandeja del CEN.', 'ok'); cargar(); });
+  on('a-regresar', async () => { const motivo = prompt('Motivo para regresarla a la Sección (la Sección lo ve en el seguimiento):'); if (!motivo) return; const { error } = await sb.rpc('regresar_a_seccion', { p_id: s.id, p_motivo: motivo }); if (error) return toast('No se pudo regresar: ' + error.message, 'error'); toast('Regresada a la Sección.', 'ok'); cargar(); });
   on('a-enviada-wa', () => marcarEnviada('WhatsApp')); on('a-enviada-correo', () => marcarEnviada('correo')); on('a-desfavorable', desfavorable); on('a-subsanada', () => actualizar({ fecha_subsanacion: hoy() }, 'Subsanación registrada; el plazo se reanuda.'));
   on('a-enviar-sg', () => actualizar({ fecha_envio_sg: hoy() }, 'Marcada como enviada al SG.', true));
   on('a-autorizacion-externa', () => { const ref = prompt('¿Cómo autorizó el Secretario General? (oficio, correo o mensaje y fecha). Queda como referencia de la autorización.'); if (!ref) return; const f = prompt('Fecha de la autorización (aaaa-mm-dd):', hoy()); if (!f) return; sb.rpc('registrar_autorizacion_externa', { p_id: s.id, p_fecha: f, p_ref: ref }).then(({ error }) => { if (error) toast('No se pudo registrar: ' + error.message, 'error'); else { toast('Autorización registrada; el alta se ejecutó en automático.', 'ok'); cargar(); } }); });

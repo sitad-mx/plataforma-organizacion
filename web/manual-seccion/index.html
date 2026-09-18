@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual de la Sección · Plataforma SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+<style>
+  .manual { background: #fff; max-width: 860px; margin: 1.5rem auto; padding: 44px 52px; box-shadow: var(--sombra); font-size: 11.5pt; line-height: 1.5; }
+  .manual .membrete { display: flex; align-items: center; gap: 18px; border-bottom: 3px solid var(--rojo); padding-bottom: 12px; margin-bottom: 18px; }
+  .manual .membrete img { height: 70px; }
+  .manual .membrete b { display: block; font-size: 13pt; }
+  .manual .membrete span { display: block; font-size: 9.5pt; color: var(--apoyo); }
+  .manual .membrete .lema { color: var(--rojo); font-weight: 700; }
+  .manual h1 { color: var(--rojo); font-size: 18pt; margin: 0 0 4px; }
+  .manual h2 { color: var(--rojo-profundo); font-size: 13pt; margin: 22px 0 8px; border-bottom: 1px solid var(--linea); padding-bottom: 4px; }
+  .manual h3 { font-size: 11.5pt; margin: 14px 0 6px; }
+  .manual ol, .manual ul { margin: 6px 0 10px 22px; padding: 0; }
+  .manual li { margin-bottom: 5px; }
+  .manual .boton { display: inline-block; border: 1px solid #999; border-radius: 4px; padding: 0 6px; font-weight: 700; font-size: 10pt; background: #F5F5F5; white-space: nowrap; }
+  .manual .boton.rojo { background: var(--rojo); color: #fff; border-color: var(--rojo); }
+  .manual .boton.verde { background: var(--verde); color: #fff; border-color: var(--verde); }
+  .manual .boton.wa { background: #25D366; color: #fff; border-color: #25D366; }
+  .manual table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 10.5pt; }
+  .manual th, .manual td { border: 1px solid #D9D9D9; padding: 5px 8px; text-align: left; vertical-align: top; }
+  .manual th { background: #F2F2F2; }
+  .manual .regla { border-left: 4px solid var(--rojo); background: #FFF7F7; padding: 8px 12px; margin: 10px 0; }
+  .manual .pie-doc { margin-top: 26px; padding-top: 10px; border-top: 1px solid #D9D9D9; font-size: 8.5pt; color: var(--apoyo); font-style: italic; }
+  .manual .salto { page-break-before: always; }
+  .manual code { background: #F2F2F2; padding: 0 4px; border-radius: 3px; font-size: 10pt; }
+  @media print { body { background: #fff; } .cabecera, .pie, .barra-impresion { display: none !important; } .manual { box-shadow: none; margin: 0; padding: 0; max-width: none; } @page { margin: 16mm; } }
+  @media (max-width: 600px) { .manual { padding: 20px 16px; } }
+</style>
+</head>
+<body>
+<header id="cabecera"></header>
+<div class="barra-impresion"><button class="btn secundario chico" onclick="history.back()">Volver</button><button class="btn secundario chico" onclick="window.print()">Imprimir</button><button class="btn chico" id="descargar">⬇ Descargar PDF</button></div>
+<div class="manual" id="manual">
+  <div class="membrete"><img src="../assets/sitad-logo-full.png" alt="SITAD"><div><b>Sindicato de Trabajadores Digitales de REEDCAM (SITAD)</b><span>Secretaría de Organización · Comité Ejecutivo Nacional</span><span class="lema">Por un futuro digital, al servicio de México</span></div></div>
+  <h1>Manual de la Sección · Plataforma de Organización</h1>
+  <p class="small muted">Cómo revisar y preautorizar las solicitudes de afiliación de tu Sección. Versión 1.0 · septiembre de 2026. Este manual se actualiza cada vez que cambia la plataforma; la versión vigente siempre está en <span id="liga-manual"></span>.</p>
+
+  <h2>1. Tu papel en cuatro líneas</h2>
+  <ul>
+    <li><b>Eres la puerta de entrada.</b> Los trabajadores de tu Sección se registran con tu liga (o tú los registras) y suben sus documentos.</li>
+    <li><b>Revisas primero.</b> Abres cada solicitud, ves cada documento en pantalla, marcas lo que está bien y señalas lo que hay que corregir.</li>
+    <li><b>Ayudas y das seguimiento</b> por WhatsApp o correo, cuantas veces haga falta, hasta que el expediente esté completo y correcto.</li>
+    <li><b>Preautorizas.</b> Cuando todo está bien, pulsas <span class="boton verde">Preautorizar y enviar al CEN</span>. Solo entonces la solicitud pasa a la Secretaría de Organización del CEN, que dictamina; el Secretario General autoriza el alta.</li>
+  </ul>
+  <div class="regla"><b>Lo que la Sección no hace:</b> no dictamina, no da de alta, no expide constancias ni gafetes, y no pide documentos distintos de los del expediente (no se pide recibo de nómina ni comprobante de domicilio).</div>
+
+  <h2>2. Entrar a la plataforma</h2>
+  <ol>
+    <li>Abre <b id="liga-sitio"></b> en tu celular o computadora y pulsa <span class="boton">Soy de una Sección o del CEN</span>.</li>
+    <li>Escribe tu correo y tu contraseña (te los entrega la Secretaría de Organización del CEN). Si no los tienes, escribe a <b>sitadorganizacion@gmail.com</b>.</li>
+    <li>Entras a tu <b>Portal de la Sección</b>. Arriba a la derecha está tu <b>liga de afiliación</b> con el botón <span class="boton">Copiar</span>: esa es la liga que compartes a los trabajadores por WhatsApp.</li>
+  </ol>
+
+  <h2>3. Las dos formas de registrar a un trabajador</h2>
+  <table><tr><th style="width:50%">A · El trabajador se registra solo</th><th>B · Tú lo registras</th></tr>
+  <tr><td>Le compartes tu liga. Llena sus datos, sube sus documentos (archivo o foto con la cámara) y recibe su <b>folio de seguimiento</b>. Después descarga sus dos formatos para firmar.</td><td>Recibes su papelería (en persona o por correo). En tu portal pulsas <span class="boton rojo">Registrar una solicitud recibida en la Sección</span>, capturas los datos tal como vienen en la cédula firmada y subes los documentos, incluidos los ya firmados.</td></tr></table>
+  <p>En los dos casos la solicitud aparece en tu pestaña <b>Solicitudes</b> con la etapa <b>Revisión seccional</b>.</p>
+
+  <h2>4. Los documentos del expediente (y cómo deben venir)</h2>
+  <table><tr><th>Documento</th><th>Qué revisar</th></tr>
+  <tr><td>1. Solicitud de afiliación (Anexo 12 y 13)</td><td>El sistema la entrega prellenada. Debe venir firmada <b>de puño y letra con tinta azul, igual que la firma de la INE</b>, en <b>dos lugares</b>: al final de la manifestación y al final del aviso de privacidad. Sin firmas insertadas como imagen ni tachaduras. Foto o escaneo de las cuatro hojas.</td></tr>
+  <tr><td>2. Cédula de afiliación (Anexo 23)</td><td>Prellenada por el sistema. Todos los campos con dato (o "No aplica"). Firmada con tinta azul al final. Los datos deben coincidir con la solicitud.</td></tr>
+  <tr><td>3. INE (frente y reverso)</td><td>Vigente. Dos fotos: frente y reverso, completas, sin reflejos ni sombras. El nombre debe coincidir exactamente con el de la solicitud.</td></tr>
+  <tr><td>4. Constancia de la CURP</td><td>Constancia oficial (gob.mx). Nombre y fecha de nacimiento iguales a la INE.</td></tr>
+  <tr><td>5. Constancia de Situación Fiscal (SAT)</td><td>Reciente, legible, con el RFC completo; el RFC y el nombre deben coincidir con la cédula.</td></tr>
+  <tr><td>Solo transporte de pasajeros o última milla: tarjeta de circulación, póliza de seguro, licencia de manejo</td><td>Completas, vigentes y legibles. El sistema las pide solo si la persona marcó "transporte".</td></tr></table>
+  <div class="regla"><b>Regla de foto:</b> completa y legible, sin recortes, sin reflejos de luz, sin sombras que tapen datos, sin dedos encima. Si no se lee, se pide de nuevo.</div>
+
+  <div class="salto"></div>
+  <h2>5. Cómo revisar una solicitud, paso a paso</h2>
+  <ol>
+    <li>En <b>Solicitudes</b>, pulsa la fila de la persona (las de etapa <b>Revisión seccional</b> aparecen primero).</li>
+    <li>Se abre la ficha. En <b>Expediente</b> ves cada documento en pantalla, uno debajo del otro. Míralos con calma; puedes <span class="boton">Abrir en pestaña</span> para verlo más grande.</li>
+    <li>Si el documento está bien, pulsa <span class="boton">Marcar correcto</span> (se pone verde).</li>
+    <li>Si algo está mal, escribe en el cuadro <b>Observación para la persona</b> qué está mal y cómo debe venir (por ejemplo: "La foto del frente de la INE está borrosa; vuelve a tomarla con buena luz") y pulsa <span class="boton">Guardar observación</span>. La persona la ve en su consulta.</li>
+    <li>Si falta un documento o alguien te lo entregó en mano, súbelo tú con <span class="boton">Subir</span> o <span class="boton">Reemplazar</span> (archivo o foto).</li>
+    <li>Cuando termines de revisar, si hay algo que corregir: en la tarjeta <b>Seguimiento a la persona</b> pulsa <span class="boton">Pedir corrección / dar seguimiento</span>. El sistema arma la lista con lo que falta y tus observaciones; revísala y acepta. Luego pulsa <span class="boton wa">WhatsApp</span> (se abre WhatsApp con el número de la persona y el mensaje ya escrito, con la liga para corregir) o <span class="boton">Correo</span>. <b>Puedes repetir esto cuantas veces haga falta.</b></li>
+    <li>Cuando la persona corrija, verás la etiqueta <b>novedad</b> en su fila. Vuelve a revisar.</li>
+    <li>Cuando los cinco (u ocho) documentos estén marcados correctos y no haya observaciones pendientes, pulsa <span class="boton verde">Preautorizar y enviar al CEN</span>. Confirma y, si quieres, deja una nota para el CEN. La etapa cambia a <b>Lista para el CEN</b>.</li>
+  </ol>
+  <p>Después de preautorizar, el CEN dictamina y el Secretario General autoriza. Si el CEN encuentra algo, te la regresa con un motivo (lo ves en el seguimiento) y vuelves al paso 2.</p>
+
+  <h2>6. Lista de verificación antes de preautorizar</h2>
+  <table><tr><th>✓</th><th>Punto</th></tr>
+  <tr><td>☐</td><td>Solicitud (Anexo 12 y 13) con sus dos firmas de puño y letra, tinta azul, igual que la INE.</td></tr>
+  <tr><td>☐</td><td>Cédula (Anexo 23) completa y firmada con tinta azul.</td></tr>
+  <tr><td>☐</td><td>INE vigente, frente y reverso legibles; nombre idéntico al de la solicitud.</td></tr>
+  <tr><td>☐</td><td>CURP: nombre y fecha de nacimiento coinciden con la INE.</td></tr>
+  <tr><td>☐</td><td>Constancia de Situación Fiscal reciente; RFC y nombre coinciden con la cédula.</td></tr>
+  <tr><td>☐</td><td>Si es transporte: tarjeta de circulación, póliza y licencia vigentes.</td></tr>
+  <tr><td>☐</td><td>La persona es trabajador(a) en activo de la Empresa y no declaró funciones de confianza (si lo declaró, anótalo en la nota para el CEN).</td></tr>
+  <tr><td>☐</td><td>Todos los documentos marcados "Correcto" y sin observaciones pendientes.</td></tr></table>
+
+  <h2>7. Qué ve la persona y cómo la ayudas</h2>
+  <ul>
+    <li>Con su <b>folio</b> y su <b>nombre</b> entra a <b>Consultar mi trámite</b>: ve la etapa ("Revisión en tu Sección"), tus observaciones y seguimientos, descarga sus formatos para firmar y sube documentos con archivo o cámara.</li>
+    <li>Si no puede con la tecnología, que vaya contigo: tú subes por ella desde la ficha.</li>
+    <li>Cuando el Secretario General autoriza, el CEN le envía su Constancia de Registro, su gafete o credencial y la carta de Finanzas para la cuota. En tu pestaña <b>Padrón adscrito</b> ves a las personas ya afiliadas de tu Sección.</li>
+  </ul>
+
+  <h2>8. Dudas</h2>
+  <p>Secretaría de Organización del CEN: <b>sitadorganizacion@gmail.com</b>. Escribe siempre con el folio de la persona.</p>
+  <div class="pie-doc">Manual de la Sección · Plataforma de Organización SITAD · v1.0 (septiembre 2026) · Secretaría de Organización del Comité Ejecutivo Nacional. Este documento orienta. En caso de duda o diferencia prevalecen la Ley Federal del Trabajo, el Estatuto y las resoluciones válidamente emitidas por los órganos competentes. C. Antonio Ancona No. 1, Interior 3, Col. Cuajimalpa, C.P. 05000, Alcaldía Cuajimalpa de Morelos, Ciudad de México.</div>
+</div>
+<footer id="pie"></footer>
+<script type="module">
+import { $, toast, armazon, ROOT } from '../assets/app.js';
+await armazon({ titulo: 'Manual de la Sección' });
+const sitio = ROOT.replace(/\/$/, ''); $('#liga-sitio').textContent = sitio; $('#liga-manual').textContent = sitio + '/manual-seccion/';
+$('#descargar').onclick = async () => {
+  const btn = $('#descargar'); btn.disabled = true; btn.textContent = 'Preparando PDF…';
+  try {
+    if (!window.html2pdf) await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+    await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: 'Manual de la Seccion - Plataforma SITAD v1.0.pdf', image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'letter' }, pagebreak: { mode: ['css', 'legacy'], before: '.salto' } }).from($('#manual')).save();
+  } catch (e) { toast('No se pudo generar el PDF; usa Imprimir y elige "Guardar como PDF".', 'error'); }
+  btn.disabled = false; btn.textContent = '⬇ Descargar PDF';
+};
+</script>
+</body>
+</html>

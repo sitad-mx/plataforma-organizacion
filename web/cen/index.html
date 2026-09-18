@@ -37,21 +37,23 @@ const inicial = param('p') && PANELES[param('p')] ? param('p') : 'solicitudes';
 $$('#pestanas button').forEach(b => b.classList.toggle('activa', b.dataset.p === inicial)); PANELES[inicial]();
 
 // ===== Solicitudes =====
-let filtro = { alcance: 'activas', texto: '', seccion: '' };
+let filtro = { alcance: 'cen', texto: '', seccion: '' };
 async function solicitudes() {
   panel.innerHTML = '<p class="cargando">Cargando solicitudes…</p>';
-  const { data, error } = await sb.from('v_solicitudes').select('id, folio, nombre_completo, telefono, seccion, seccion_slug, fecha_recepcion, estado, semaforo, fuera_de_plazo, dias_para_dictamen, dias_para_ejecutar, limite_dictamen, canal, duplicado, es_confianza, documentos_completos, con_novedad, alta_por_enviar, fecha_dictamen, sentido, fecha_envio_sg, fecha_autorizacion_sg').order('fecha_recepcion', { ascending: false }).limit(500);
+  const { data, error } = await sb.from('v_solicitudes').select('id, folio, nombre_completo, telefono, seccion, seccion_slug, fecha_recepcion, estado, etapa, preautorizada_at, semaforo, fuera_de_plazo, dias_para_dictamen, dias_para_ejecutar, limite_dictamen, canal, duplicado, es_confianza, documentos_completos, con_novedad, alta_por_enviar, fecha_dictamen, sentido, fecha_envio_sg, fecha_autorizacion_sg').order('fecha_recepcion', { ascending: false }).limit(500);
   if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
   const secciones = [...new Set(data.map(s => s.seccion))].sort();
   const porEnviar = data.filter(s => s.alta_por_enviar);
   const activas = data.filter(s => !['Ejecutada en padrón', 'Dictaminada desfavorable', 'Desistida'].includes(s.estado) || s.alta_por_enviar);
-  const novedades = activas.filter(s => s.con_novedad);
-  $('#resumen').innerHTML = `${activas.length} en trámite · <b style="color:var(--rojo)">${novedades.length} con novedades</b> · <b style="color:var(--verde)">${porEnviar.length} altas por enviar</b> · ${activas.filter(s => s.fuera_de_plazo).length} fuera de plazo · ${activas.filter(s => s.estado === 'Enviada al SG').length} con el SG`;
+  const enSeccion = activas.filter(s => s.etapa === 'Revisión seccional');
+  const paraCEN = activas.filter(s => s.etapa !== 'Revisión seccional');
+  const novedades = paraCEN.filter(s => s.con_novedad);
+  $('#resumen').innerHTML = `<b style="color:var(--rojo)">${paraCEN.length} para el CEN</b> · ${enSeccion.length} en revisión seccional · ${novedades.length} con novedades · <b style="color:var(--verde)">${porEnviar.length} altas por enviar</b> · ${activas.filter(s => s.fuera_de_plazo).length} fuera de plazo · ${activas.filter(s => s.estado === 'Enviada al SG').length} con el SG`;
   const favorablesSinEnviar = data.filter(s => s.estado === 'Dictaminada favorable');
   const enviadas = data.filter(s => s.estado === 'Enviada al SG');
   panel.innerHTML = `
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-      <select id="f-alcance"><option value="activas">En trámite</option><option value="novedades">Con novedades (documentos nuevos)</option><option value="revisar">Por revisar (completas, sin dictamen)</option><option value="prevenidas">Prevenidas (esperando a la persona)</option><option value="vencidas">Fuera de plazo</option><option value="sg">Con el Secretario General</option><option value="enviar">Altas autorizadas por enviar (constancia, gafete, carta)</option><option value="todas">Todas</option></select>
+      <select id="f-alcance"><option value="cen">Para el CEN (preautorizadas por la Sección)</option><option value="seccional">En revisión seccional (todavía con la Sección)</option><option value="activas">Todo lo en trámite</option><option value="novedades">Con novedades (documentos nuevos)</option><option value="revisar">Por dictaminar (preautorizadas y completas)</option><option value="prevenidas">Prevenidas (esperando a la persona)</option><option value="vencidas">Fuera de plazo</option><option value="sg">Con el Secretario General</option><option value="enviar">Altas autorizadas por enviar (constancia, gafete, carta)</option><option value="todas">Todas</option></select>
       <select id="f-seccion"><option value="">Todas las secciones</option>${secciones.map(s => `<option>${esc(s)}</option>`).join('')}</select>
       <input type="text" id="f-texto" placeholder="Buscar por folio o nombre" style="max-width:260px">
       ${esOrg ? `<a class="btn secundario chico" href="${ROOT}afiliate/" style="margin-left:auto">Registrar solicitud recibida por correo</a>` : ''}
@@ -59,14 +61,16 @@ async function solicitudes() {
     ${novedades.length ? `<div class="aviso small"><b>${novedades.length} solicitud(es) con documentos nuevos</b> desde tu última revisión: ${novedades.slice(0, 6).map(s => `<a href="solicitud.html?id=${s.id}">${esc(s.folio)}</a>`).join(', ')}${novedades.length > 6 ? '…' : ''}.</div>` : ''}
     ${porEnviar.length ? `<div class="aviso ok small"><b>${porEnviar.length} alta(s) autorizada(s) por el Secretario General, por enviar:</b> ${porEnviar.slice(0, 6).map(s => `<a href="solicitud.html?id=${s.id}">${esc(s.folio)} · ${esc(s.nombre_completo)}</a>`).join(' · ')}${porEnviar.length > 6 ? '…' : ''}. Abre cada una, envía constancia, gafete y carta con un clic y márcala como enviada.</div>` : ''}
     ${enviadas.length ? `<div class="aviso atencion small"><b>${enviadas.length} dictamen(es) favorable(s) esperan la autorización del Secretario General.</b> <a href="${mailto(await correoSG(), correoAlSG(enviadas).asunto, correoAlSG(enviadas).cuerpo)}">Recordárselo por correo</a> · <a href="${ROOT}sg/">Ver bandeja de autorizaciones</a></div>` : ''}
-    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th></th><th>Folio</th><th>Persona</th><th>Sección</th><th>Recibida</th><th>Estado</th><th>Plazo</th><th>Canal</th></tr></thead><tbody id="filas"></tbody></table></div>`;
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th></th><th>Folio</th><th>Persona</th><th>Sección</th><th>Recibida</th><th>Etapa</th><th>Estado</th><th>Plazo</th></tr></thead><tbody id="filas"></tbody></table></div>`;
   $('#f-alcance').value = filtro.alcance; $('#f-seccion').value = filtro.seccion; $('#f-texto').value = filtro.texto;
   const pintar = () => {
     filtro = { alcance: $('#f-alcance').value, seccion: $('#f-seccion').value, texto: $('#f-texto').value.toLowerCase() };
     let lista = data;
     if (filtro.alcance === 'activas') lista = activas;
+    if (filtro.alcance === 'cen') lista = paraCEN;
+    if (filtro.alcance === 'seccional') lista = enSeccion;
     if (filtro.alcance === 'novedades') lista = novedades;
-    if (filtro.alcance === 'revisar') lista = activas.filter(s => ['Recibida', 'Subsanada'].includes(s.estado) && s.documentos_completos);
+    if (filtro.alcance === 'revisar') lista = paraCEN.filter(s => ['Recibida', 'Subsanada'].includes(s.estado) && s.documentos_completos);
     if (filtro.alcance === 'prevenidas') lista = activas.filter(s => s.estado === 'Prevenida');
     if (filtro.alcance === 'vencidas') lista = activas.filter(s => s.fuera_de_plazo);
     if (filtro.alcance === 'sg') lista = enviadas;
@@ -77,9 +81,10 @@ async function solicitudes() {
       <td title="${esc(SEMAFORO_TXT[s.semaforo] || '')}"><span class="punto ${s.semaforo}"></span></td>
       <td><b>${esc(s.folio)}</b></td>
       <td>${esc(s.nombre_completo)}${s.con_novedad ? ' <span class="etiqueta novedad">novedad</span>' : ''}${s.alta_por_enviar ? ' <span class="etiqueta verde">alta por enviar</span>' : ''}${s.es_confianza ? ' <span class="etiqueta rojo">confianza</span>' : ''}${s.duplicado ? ' <span class="etiqueta rojo">duplicado</span>' : ''}${!s.documentos_completos && !['Ejecutada en padrón','Dictaminada desfavorable','Desistida'].includes(s.estado) ? ' <span class="etiqueta amarillo">expediente incompleto</span>' : ''}<br><span class="tiny muted">📱 ${esc(s.telefono || '—')}</span></td>
-      <td>${esc(s.seccion)}</td><td>${fecha(s.fecha_recepcion)}</td>
+      <td>${esc(s.seccion)}<br><span class="tiny muted">${s.canal === 'publico' ? 'por la liga' : 'por la Sección'}</span></td><td>${fecha(s.fecha_recepcion)}</td>
+      <td><span class="etiqueta ${s.etapa === 'Lista para el CEN' ? 'rojo' : s.etapa === 'Revisión seccional' ? '' : s.etapa === 'Concluida' ? 'carbon' : 'azul'}">${esc(s.etapa)}</span></td>
       <td><span class="etiqueta ${(ESTADO_INFO[s.estado] || {}).etiqueta || ''}">${esc(s.estado)}</span></td>
-      <td>${plazo(s)}</td><td class="small muted">${s.canal === 'publico' ? 'Liga pública' : 'Sección'}</td></tr>`).join('') : '<tr><td colspan="8" class="vacio">No hay solicitudes con ese filtro.</td></tr>';
+      <td>${plazo(s)}</td></tr>`).join('') : '<tr><td colspan="8" class="vacio">No hay solicitudes con ese filtro.</td></tr>';
     $$('#filas tr.clic').forEach(tr => tr.onclick = () => location.href = 'solicitud.html?id=' + tr.dataset.id);
   };
   ['f-alcance', 'f-seccion'].forEach(id => $('#' + id).onchange = pintar); $('#f-texto').oninput = pintar; pintar();

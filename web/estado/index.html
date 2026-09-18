@@ -65,7 +65,7 @@ async function consultar() {
     <div class="tarjeta">
       <p class="small muted mb-0">${esc(x.seccion)} · ${esc(x.nombre)}</p>
       <h2>Folio ${esc(x.folio)} <span class="etiqueta ${info.etiqueta || ''}">${esc(x.estado)}</span></h2>
-      <p>${esc(info.persona || '')}</p>
+      <p>${esc(info.persona || '')}${abierta && x.etapa ? ` <b>Etapa actual: ${esc(x.etapa)}.</b>${x.etapa.startsWith('Revisión en tu Sección') ? ' Tu Sección revisa tus documentos y te avisa si hay que corregir algo; cuando todo esté bien, lo pasa a la Secretaría de Organización del CEN.' : ''}` : ''}</p>
       ${x.mensaje_publico ? `<div class="aviso"><b>Mensaje de la Secretaría de Organización:</b><br>${esc(x.mensaje_publico).replace(/\n/g, '<br>')}</div>` : ''}
       ${segs && segs.length ? `<div class="aviso atencion"><b>Lo que la Secretaría te ha pedido corregir</b> (lo más reciente primero):<ol class="linea-tiempo mt-1">${segs.map(g => `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'} · ${fechaLarga(g.fecha)}</b><span>${(g.puntos || []).length ? g.puntos.map((p, i) => (i + 1) + '. ' + esc(p)).join('<br>') : esc(g.texto || '')}</span></li>`).join('')}</ol>${abiertaTexto(x.estado)}</div>` : ''}
       ${enConstitucion && x.estado !== 'Ejecutada en padrón' ? `<div class="aviso small">Tu Sección está en constitución: con tu alta quedas registrado(a) para la <b>Asamblea Constitutiva</b> del ${esc(fechaHoraLarga(datos.asamblea_fecha_hora))}${datos.asamblea_direccion ? ', ' + esc(datos.asamblea_direccion) : ''}.</div>` : ''}
