@@ -30,17 +30,30 @@ export function diasDesde(d) { if (!d) return null; return Math.round((new Date(
 
 // ===== Catálogos de pantalla =====
 // Expediente según AF-02 v1.1 (formatos del SG, 18-sep-2026): cinco documentos; tres más si la actividad es transporte.
+// Cada documento trae sus instrucciones para la persona (se muestran al subirlo). Reglas de Manuel (18-sep): firmas con tinta azul, igual que en la INE; fotos legibles, sin reflejos ni sombras.
+export const REGLAS_FOTO = 'Foto o escaneo completo y legible: sin recortes, sin reflejos de luz, sin sombras que tapen datos, sin dedos encima.';
+export const REGLAS_FIRMA = 'Firma de puño y letra con TINTA AZUL, igual que la firma de tu INE. No se aceptan firmas insertadas como imagen ni tachaduras.';
 export const DOCS = [
-  { tipo: 'solicitud', nombre: 'Solicitud de afiliación firmada (Anexo 12 y 13: manifestación y aviso de privacidad, dos firmas de puño y letra)', corto: 'Solicitud (Anexo 12-13)', ayuda: 'El sistema te la entrega prellenada; imprímela, fírmala en las dos hojas y súbela escaneada o fotografiada completa.' },
-  { tipo: 'cedula', nombre: 'Cédula de afiliación firmada (Anexo 23), con todos los campos', corto: 'Cédula (Anexo 23)', ayuda: 'También te la entrega prellenada el sistema; fírmala y súbela.' },
-  { tipo: 'identificacion', nombre: 'Identificación oficial vigente (credencial para votar INE), frente y reverso', corto: 'INE', ayuda: 'Legible, sin recortes.' },
-  { tipo: 'curp', nombre: 'Constancia de la CURP', corto: 'CURP', ayuda: 'Impresa desde el portal oficial (gob.mx).' },
-  { tipo: 'constancia_fiscal', nombre: 'Constancia de Situación Fiscal (SAT), reciente y con RFC completo', corto: 'Constancia fiscal', ayuda: 'Se descarga del portal del SAT. Se usa para la emisión de tus recibos.' },
+  { tipo: 'solicitud', nombre: 'Solicitud de afiliación firmada (Anexo 12 y 13)', corto: 'Solicitud (Anexo 12-13)', firma: true, generado: true,
+    pasos: ['Descarga el PDF: ya viene lleno con tus datos.', 'Imprímelo (4 hojas).', 'Fírmalo con tinta azul en DOS lugares: al final de la manifestación (hoja 3) y al final del aviso de privacidad (hoja 4).', 'Toma foto de las 4 hojas o escanéalas en un solo PDF y súbelo aquí.'],
+    ayuda: 'El sistema te lo entrega prellenado. Lleva dos firmas: manifestación y aviso de privacidad.' },
+  { tipo: 'cedula', nombre: 'Cédula de afiliación firmada (Anexo 23)', corto: 'Cédula (Anexo 23)', firma: true, generado: true,
+    pasos: ['Descarga el PDF: ya viene lleno con todos tus datos.', 'Imprímelo (2 hojas). Revisa que ningún dato esté vacío o equivocado.', 'Fírmalo con tinta azul al final de la hoja 2.', 'Toma foto de las 2 hojas o escanéalas y súbelo aquí.'],
+    ayuda: 'El sistema te la entrega prellenada. Todos los campos son obligatorios.' },
+  { tipo: 'identificacion', nombre: 'Identificación oficial vigente (credencial para votar INE)', corto: 'INE', partes: [['frente', 'Frente de la INE'], ['reverso', 'Reverso de la INE']],
+    pasos: ['Toma una foto del FRENTE, completa y derecha.', 'Toma otra foto del REVERSO.', 'Revisa que se lea tu nombre, tu foto y la vigencia.'],
+    ayuda: 'Debe estar vigente. El nombre debe coincidir con el de tu solicitud.' },
+  { tipo: 'curp', nombre: 'Constancia de la CURP', corto: 'CURP',
+    pasos: ['Descárgala en gob.mx/curp (es gratis) o toma foto de la impresa.', 'Súbela completa.'],
+    ayuda: 'Constancia oficial; el nombre y la fecha de nacimiento deben coincidir con tu INE.' },
+  { tipo: 'constancia_fiscal', nombre: 'Constancia de Situación Fiscal (SAT)', corto: 'Constancia fiscal',
+    pasos: ['Descárgala del portal del SAT (sat.gob.mx, con tu RFC y contraseña o e.firma) o pídela en tu módulo del SAT.', 'Sube el PDF completo o foto de todas sus hojas.'],
+    ayuda: 'Reciente, con tu RFC completo. Se usa para la emisión de tus recibos.' },
 ];
 export const DOCS_TRANSPORTE = [
-  { tipo: 'tarjeta_circulacion', nombre: 'Tarjeta de circulación (solo transporte de pasajeros o última milla)', corto: 'Tarjeta de circulación' },
-  { tipo: 'poliza', nombre: 'Póliza de seguro del vehículo (solo transporte)', corto: 'Póliza de seguro' },
-  { tipo: 'licencia', nombre: 'Licencia de manejo (solo transporte)', corto: 'Licencia de manejo' },
+  { tipo: 'tarjeta_circulacion', nombre: 'Tarjeta de circulación del vehículo', corto: 'Tarjeta de circulación', pasos: ['Foto de la tarjeta completa, por el lado de los datos.'], ayuda: 'Solo transporte de pasajeros o última milla.' },
+  { tipo: 'poliza', nombre: 'Póliza de seguro del vehículo', corto: 'Póliza de seguro', pasos: ['Foto o PDF de la carátula de la póliza vigente (número, vigencia y aseguradora).'], ayuda: 'Solo transporte.' },
+  { tipo: 'licencia', nombre: 'Licencia de manejo vigente', corto: 'Licencia de manejo', pasos: ['Foto del frente de la licencia, completa y legible.'], ayuda: 'Solo transporte.' },
 ];
 export function docsRequeridos(transporte) { return transporte ? [...DOCS, ...DOCS_TRANSPORTE] : DOCS; }
 const TODOS_DOCS = [...DOCS, ...DOCS_TRANSPORTE, { tipo: 'otro', nombre: 'Otro documento', corto: 'Otro' },
@@ -167,6 +180,20 @@ export function correoAlta(p, s) {
     cuerpo: `Hola, ${nombre}:\n\nEl Secretario General autorizó tu alta en el Padrón de Afiliados el ${fechaLarga(p.fecha_autorizacion_sg || s?.fecha_autorizacion_sg)}. A partir de hoy formas parte del ${CFG.SINDICATO}, ${enConstitucion ? 'con adscripción a la ' + seccion + ', y quedas registrado(a) para participar en su Asamblea Constitutiva' : 'adscrito(a) a la ' + seccion}. Tu número de afiliación es ${p.numero_afiliacion}.\n\nAdjuntamos tu Constancia de Registro${enConstitucion ? ' (con la información de la asamblea) y tu gafete' : ' de Afiliación y tu credencial'}.${bloqueAsamblea}\n\nLa Secretaría de Finanzas te ${enConstitucion ? 'enviará por separado' : 'envía adjunta'} la información para cubrir tu cuota sindical ordinaria (cuenta, monto y cómo enviar tu comprobante). También puedes registrar tu pago en ${ROOT}pagos/.\n\n${enConstitucion ? '' : 'Te invitamos a leer los Documentos Básicos: ' + LIGA_DOCS + '. Tu Sección te contactará para integrarte a sus actividades.\n\n'}${enConstitucion ? 'Atentamente,\nMESA DE REGISTRO · ' : ''}${FIRMA}`,
     finanzas: `Se informa el alta de ${p.nombre_completo}, número de afiliación ${p.numero_afiliacion}, folio ${p.folio}, ${seccion}, para la gestión de su cuota sindical ordinaria.` };
 }
+// ===== WhatsApp (se abre WhatsApp Web / la app con el número de la persona y el mensaje escrito) =====
+export function telWa(t) { const d = String(t || '').replace(/\D/g, ''); if (!d) return ''; return d.length === 10 ? '52' + d : d; }
+export function whatsapp(tel, texto) { return `https://wa.me/${telWa(tel)}?text=${encodeURIComponent(texto)}`; }
+export function ligaTramite(s) { return `${ROOT}estado/?f=${encodeURIComponent(s.folio)}&c=${encodeURIComponent(s.correo || '')}`; }
+export function waAcuse(s) { return `Hola, ${s.nombre_completo.split(' ')[0]}. La Secretaría de Organización del SITAD recibió tu solicitud de afiliación el ${fechaLarga(s.fecha_recepcion)}. Tu folio es *${s.folio}*. Revisamos tu expediente en un máximo de diez días hábiles; si falta algo te lo pedimos una sola vez por este medio. Consulta tu trámite y sube documentos aquí: ${ligaTramite(s)}`; }
+export function waPrevencion(s, faltantes) { return `Hola, ${s.nombre_completo.split(' ')[0]}. Sobre tu solicitud de afiliación al SITAD, folio *${s.folio}*: al revisar tu expediente falta lo siguiente:\n\n${faltantes.map((f, i) => (i + 1) + '. ' + f).join('\n')}\n\nPor favor súbelo a más tardar el *${fechaLarga(s.limite_subsanacion)}* en esta liga (entra con tu folio y tu nombre o correo): ${ligaTramite(s)}\n\nEs la única prevención que se hace; si no se atiende en tiempo, la solicitud se resuelve con lo que obre en el expediente. Cualquier duda, responde por aquí.\n\nSecretaría de Organización · CEN · SITAD`; }
+export function waFavorable(s) { return `Hola, ${s.nombre_completo.split(' ')[0]}. Tu solicitud de afiliación al SITAD (folio *${s.folio}*) fue dictaminada *FAVORABLE* el ${fechaLarga(s.fecha_dictamen || hoy())}, con adscripción a la ${s.seccion}. Se remitió al Secretario General para autorizar tu alta en el Padrón. Te avisamos en cuanto quede registrada. Puedes seguir tu trámite en ${ligaTramite(s)}\n\nSecretaría de Organización · CEN · SITAD`; }
+export function waDesfavorable(s) { return `Hola, ${s.nombre_completo.split(' ')[0]}. Sobre tu solicitud de afiliación al SITAD (folio *${s.folio}*): no se acreditó el siguiente requisito de ingreso: ${s.motivo_desfavorable || '[motivo]'}. Por ello se dictaminó desfavorable. Puedes presentar una nueva solicitud cuando reúnas el requisito, o pedir aclaraciones por este medio.\n\nSecretaría de Organización · CEN · SITAD`; }
+export function waAlta(p, s) { const seccion = p.seccion || s?.seccion; const asamblea = p.asamblea_fecha_hora || s?.asamblea_fecha_hora; const dir = p.asamblea_direccion || s?.asamblea_direccion;
+  return `¡Bienvenido(a), ${p.nombre_completo.split(' ')[0]}! El Secretario General autorizó tu alta en el Padrón de Afiliados del SITAD. Tu número de afiliación es *${p.numero_afiliacion}* (folio ${p.folio}), adscrito(a) a la ${seccion}.${asamblea ? '\n\n*Asamblea Constitutiva:* ' + fechaHoraLarga(asamblea) + (dir ? ', en ' + dir : '') + '. Llega una hora antes con tu gafete impreso o en el teléfono y tu identificación oficial.' : ''}\n\nTu Constancia de Registro${asamblea ? ' y tu gafete' : ' y tu credencial'} te los enviamos por correo. Documentos Básicos del Sindicato: ${LIGA_DOCS}\n\nCuota sindical: la Secretaría de Finanzas te manda la información de pago; también puedes registrar tu pago en ${ROOT}pagos/\n\nSecretaría de Organización · CEN · SITAD`; }
+// Carta de Finanzas (AF-09) en texto, para correo y WhatsApp
+export function correoFinanzas(p, cfg) { const nombre = p.nombre_completo.split(' ')[0]; const sec = p.seccion_numero ? 'SECCIÓN ' + p.seccion_numero : (p.seccion || '').toUpperCase();
+  const cuerpo = `Hola, ${nombre}:\n\nLa Secretaría de Finanzas del Sindicato de Trabajadores Digitales (SITAD) te invita a realizar el pago de tu cuota sindical, aportación destinada al fortalecimiento de las actividades, servicios, programas y representación que el Sindicato brinda a todas las personas afiliadas.\n\nDepósito o transferencia a la cuenta oficial del Sindicato:\nInstitución: ${cfg.banco_institucion || ''}\nTitular: ${cfg.banco_titular || ''}\nCuenta: ${cfg.banco_cuenta || ''}\nCLABE: ${cfg.banco_clabe || ''}\nMonto de la cuota: $${cfg.cuota_monto || '360'}.00 MXN (${cfg.cuota_periodicidad || 'mensual'})\n\nEn el concepto de la transferencia escribe: ${p.nombre_completo.toUpperCase()} – ${sec}\n\nDespués registra tu pago aquí (nombre, número de afiliación ${p.numero_afiliacion}, teléfono, periodo, monto, fecha y comprobante): ${ROOT}pagos/?num=${p.numero_afiliacion}\nO envía el comprobante a ${cfg.correo_finanzas || CFG.CORREO_FINANZAS} con el asunto: Comprobante de Pago de Cuota Sindical – ${p.nombre_completo} – ${p.numero_afiliacion}\n\nRecibido el comprobante, Finanzas verifica la operación, registra el pago en el padrón financiero y emite tu comprobante.\n\n“Por un futuro digital, al servicio de México”\n${(cfg.finanzas_titular || '').toUpperCase()} · Secretaría de Finanzas · Comité Ejecutivo Nacional · SITAD`;
+  return { asunto: `SITAD · Invitación para realizar el pago de cuota sindical · No. ${p.numero_afiliacion}`, cuerpo }; }
 export function correoAlSG(lista) {
   const filas = lista.map(s => `• ${s.folio} · ${s.nombre_completo} · ${s.seccion} · dictamen del ${fecha(s.fecha_dictamen)}`).join('\n');
   return { asunto: `SITAD · Dictámenes favorables para autorización de alta (${lista.length})`,

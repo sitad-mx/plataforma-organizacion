@@ -13,11 +13,11 @@
 <header id="cabecera"></header>
 <main class="contenido angosto">
   <h1>Consultar mi trámite</h1>
-  <p class="muted">Escribe el folio que recibiste (por ejemplo SITAD-21-000012 o SITAD-SON-000003) y el correo con el que hiciste tu solicitud.</p>
+  <p class="muted">Escribe tu <b>folio de seguimiento</b> (por ejemplo SITAD-35-000012) y tu <b>nombre</b> o tu <b>correo</b>. Aquí ves en qué paso va tu solicitud, los mensajes de la Secretaría y subes los documentos que falten.</p>
   <form id="forma" class="tarjeta">
     <div class="fila">
       <div class="campo"><label for="folio">Folio</label><input type="text" id="folio" required style="text-transform:uppercase" placeholder="SITAD-__-______"></div>
-      <div class="campo"><label for="correo">Correo electrónico</label><input type="email" id="correo" required></div>
+      <div class="campo"><label for="clave">Tu nombre o tu correo</label><input type="text" id="clave" required placeholder="Como lo escribiste en tu solicitud"></div>
     </div>
     <div class="acciones"><button class="btn" type="submit" id="buscar">Consultar</button></div>
   </form>
@@ -25,72 +25,80 @@
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, esc, toast, ocupado, param, armazon, docsRequeridos, DOC_NOMBRE, DOC_CORTO, ESTADO_INFO, fecha, fechaLarga, fechaHoraLarga, subirArchivo, validarArchivo, rutaDocumento, ROOT, CFG } from '../assets/app.js';
+import { sb, $, $$, esc, toast, ocupado, param, armazon, docsRequeridos, DOC_CORTO, ESTADO_INFO, fecha, fechaLarga, fechaHoraLarga, subirArchivo, rutaDocumento, ROOT, CFG } from '../assets/app.js';
+import { tarjetaDoc, activarTarjetas } from '../assets/docs-ui.js';
 await armazon({ titulo: 'Consulta de trámite' });
 const res = $('#resultado');
-if (param('f')) $('#folio').value = param('f'); if (param('c')) $('#correo').value = param('c');
+if (param('f')) $('#folio').value = param('f'); if (param('c')) $('#clave').value = param('c');
 $('#forma').onsubmit = e => { e.preventDefault(); consultar(); };
 if (param('f') && param('c')) consultar();
 
 async function consultar() {
-  const folio = $('#folio').value.trim().toUpperCase(), correo = $('#correo').value.trim().toLowerCase();
+  const folio = $('#folio').value.trim().toUpperCase(), clave = $('#clave').value.trim();
   const btn = $('#buscar'); ocupado(btn, true, 'Buscando…'); res.innerHTML = '<p class="cargando">Buscando…</p>';
   const [{ data: s, error }, { data: docs }, { data: datos }] = await Promise.all([
-    sb.rpc('consultar_solicitud', { p_folio: folio, p_correo: correo }),
-    sb.rpc('documentos_publicos', { p_folio: folio, p_correo: correo }),
-    sb.rpc('solicitud_publica_datos', { p_folio: folio, p_correo: correo }),
+    sb.rpc('consultar_solicitud', { p_folio: folio, p_correo: clave }),
+    sb.rpc('documentos_publicos', { p_folio: folio, p_correo: clave }),
+    sb.rpc('solicitud_publica_datos', { p_folio: folio, p_correo: clave }),
   ]);
   ocupado(btn, false);
-  if (error || !s || !s.length) { res.innerHTML = `<div class="aviso error"><b>No encontramos esa solicitud.</b> Revisa que el folio y el correo sean exactamente los que usaste. Si el problema sigue, escribe a <a href="mailto:${CFG.CORREO_ORGANIZACION}">${CFG.CORREO_ORGANIZACION}</a> con tu nombre completo.</div>`; return; }
+  if (error || !s || !s.length) { res.innerHTML = `<div class="aviso error"><b>No encontramos esa solicitud.</b> Revisa que el folio sea el que recibiste y que tu nombre o correo estén escritos como en tu solicitud. Si el problema sigue, escribe a <a href="mailto:${CFG.CORREO_ORGANIZACION}">${CFG.CORREO_ORGANIZACION}</a> con tu nombre completo.</div>`; return; }
   const x = s[0]; const info = ESTADO_INFO[x.estado] || {};
   const transporte = !!(docs && docs[0] && docs[0].actividad_transporte); const req = docsRequeridos(transporte);
-  const tienen = new Set((docs || []).filter(d => d.tipo).map(d => d.tipo)); const slug = docs && docs[0] ? docs[0].slug : null;
-  const q = `f=${encodeURIComponent(folio)}&c=${encodeURIComponent(correo)}`;
+  const existentes = {}; (docs || []).filter(d => d.tipo).forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
+  const slug = docs && docs[0] ? docs[0].slug : null; const correo = docs && docs[0] ? docs[0].correo : clave;
+  const q = `f=${encodeURIComponent(folio)}&c=${encodeURIComponent(clave)}`;
+  const ligas = { solicitud: `${ROOT}documento.html?tipo=solicitud&${q}`, cedula: `${ROOT}documento.html?tipo=cedula&${q}` };
   const enConstitucion = datos && datos.asamblea_fecha_hora;
+  const abierta = ['Recibida', 'Prevenida', 'Subsanada'].includes(x.estado);
+  const presente = d => d.partes ? d.partes.every(([pt]) => existentes[d.tipo + '|' + pt]) : !!existentes[d.tipo + '|'];
+  const recibidos = req.filter(presente).length;
   const pasos = [
     { t: 'Solicitud recibida', f: x.fecha_recepcion, ok: true },
-    ...(x.fecha_prevencion ? [{ t: 'Prevención: faltó documentación', f: x.fecha_prevencion, ok: true, extra: x.limite_subsanacion ? `Plazo para subsanar: ${fechaLarga(x.limite_subsanacion)}` : '' }] : []),
-    { t: x.sentido === 'Desfavorable' ? 'Dictamen desfavorable' : 'Dictamen de la Secretaría de Organización', f: x.fecha_dictamen, ok: !!x.fecha_dictamen },
+    ...(x.fecha_prevencion ? [{ t: 'La Secretaría te pidió documentos (prevención)', f: x.fecha_prevencion, ok: true, extra: x.limite_subsanacion ? `Fecha límite para subirlos: ${fechaLarga(x.limite_subsanacion)}` : '' }] : []),
+    { t: x.sentido === 'Desfavorable' ? 'Dictamen desfavorable' : 'Revisión y dictamen de la Secretaría de Organización', f: x.fecha_dictamen, ok: !!x.fecha_dictamen },
     { t: 'Autorización del Secretario General', f: null, ok: ['Autorizada', 'Ejecutada en padrón'].includes(x.estado) },
     { t: 'Alta en el Padrón de Afiliados', f: x.fecha_alta, ok: !!x.fecha_alta },
   ];
-  const abierta = ['Recibida', 'Prevenida'].includes(x.estado);
   res.innerHTML = `
     <div class="tarjeta">
-      <p class="small muted mb-0">${esc(x.seccion)}</p>
+      <p class="small muted mb-0">${esc(x.seccion)} · ${esc(x.nombre)}</p>
       <h2>Folio ${esc(x.folio)} <span class="etiqueta ${info.etiqueta || ''}">${esc(x.estado)}</span></h2>
       <p>${esc(info.persona || '')}</p>
+      ${x.mensaje_publico ? `<div class="aviso"><b>Mensaje de la Secretaría de Organización:</b><br>${esc(x.mensaje_publico).replace(/\n/g, '<br>')}</div>` : ''}
       ${enConstitucion && x.estado !== 'Ejecutada en padrón' ? `<div class="aviso small">Tu Sección está en constitución: con tu alta quedas registrado(a) para la <b>Asamblea Constitutiva</b> del ${esc(fechaHoraLarga(datos.asamblea_fecha_hora))}${datos.asamblea_direccion ? ', ' + esc(datos.asamblea_direccion) : ''}.</div>` : ''}
-      ${x.estado === 'Ejecutada en padrón' ? `<div class="aviso ok small"><b>Ya eres persona afiliada.</b> Tu Constancia de Registro${enConstitucion ? ' y tu gafete para la asamblea' : ' y tu credencial'} te los entrega la Secretaría de Organización. Para tu cuota sindical, <a href="${ROOT}pagos/?curp=${encodeURIComponent(datos?.curp || '')}">registra tu pago aquí</a>.</div>` : ''}
+      ${x.estado === 'Ejecutada en padrón' ? `<div class="aviso ok small"><b>Ya eres persona afiliada.</b> Tu Constancia de Registro${enConstitucion ? ' y tu gafete para la asamblea' : ' y tu credencial'} te los envía la Secretaría de Organización por correo y WhatsApp. Documentos Básicos del Sindicato: <a href="${CFG.LIGA_DOCUMENTOS_BASICOS}" target="_blank">Estatutos y Documentos Básicos</a>. Para tu cuota sindical, <a href="${ROOT}pagos/?curp=${encodeURIComponent(datos?.curp || '')}">registra tu pago aquí</a>.</div>` : ''}
       <ol class="linea-tiempo mt-2">${pasos.map(p => `<li class="${p.ok ? 'hecho' : ''}"><b>${esc(p.t)}</b><span>${p.f ? fechaLarga(p.f) : (p.ok ? 'Hecho' : 'Pendiente')}${p.extra ? ' · ' + esc(p.extra) : ''}</span></li>`).join('')}</ol>
     </div>
-    ${abierta ? `<div class="tarjeta"><h3>Tus formatos para firmar</h3><p class="small">Prellenados con tus datos. Imprímelos, fírmalos de puño y letra (la solicitud lleva dos firmas) y súbelos abajo.</p>
-      <div class="acciones"><a class="btn secundario" href="${ROOT}documento.html?tipo=solicitud&${q}" target="_blank">Solicitud de afiliación (Anexo 12 y 13)</a><a class="btn secundario" href="${ROOT}documento.html?tipo=cedula&${q}" target="_blank">Cédula de afiliación (Anexo 23)</a></div></div>` : ''}
+    ${abierta ? `<div class="tarjeta"><h3>1. Tus formatos para firmar</h3>
+      <ol class="small" style="margin:0 0 .5rem 1.1rem;padding:0"><li>Descarga los dos PDF: ya vienen llenos con tus datos.</li><li>Imprímelos y fírmalos <b>con tinta azul</b>, igual que la firma de tu INE. La solicitud lleva <b>dos firmas</b> (manifestación y aviso de privacidad); la cédula una.</li><li>Tómales foto o escanéalos y súbelos abajo, en su tarjeta.</li></ol>
+      <div class="acciones"><a class="btn" href="${ligas.solicitud}" target="_blank">Descargar solicitud (Anexo 12 y 13)</a><a class="btn" href="${ligas.cedula}" target="_blank">Descargar cédula (Anexo 23)</a></div></div>` : ''}
     <div class="tarjeta">
-      <h3>Tu expediente (${req.filter(d => tienen.has(d.tipo)).length} de ${req.length} documentos)</h3>
-      <ul class="doc-lista">${req.map(d => { const doc = (docs || []).find(q => q.tipo === d.tipo); return `<li><span class="punto ${doc ? (doc.validado === false ? 'amarillo' : 'verde') : 'rojo'}"></span><span class="nombre">${esc(d.nombre)}${doc && doc.observacion ? `<br><span class="small" style="color:var(--ambar)">Observación de la Mesa de Registro: ${esc(doc.observacion)}</span>` : ''}</span><span class="small muted">${doc ? 'Recibido' : 'Falta'}</span></li>`; }).join('')}</ul>
-      ${abierta && slug ? `
-        <h3 class="mt-3">Subir o reemplazar un documento</h3>
-        <p class="small muted">PDF, JPG o PNG, máximo 5 MB. Si subes un documento que ya estaba, el nuevo sustituye al anterior.</p>
-        <div class="fila">
-          <div class="campo"><label for="tipo">Documento</label><select id="tipo">${req.map(d => `<option value="${d.tipo}" ${!tienen.has(d.tipo) ? 'selected' : ''}>${esc(d.corto)}</option>`).join('')}</select></div>
-          <div class="campo"><label for="archivo">Archivo</label><input type="file" id="archivo" accept="application/pdf,image/jpeg,image/png"></div>
-        </div>
-        <div class="acciones"><button class="btn" id="subir">Subir documento</button></div>` : ''}
+      <h3>${abierta ? '2. ' : ''}Tu expediente (${recibidos} de ${req.length} documentos)</h3>
+      ${abierta ? '<p class="small muted">Sube cada documento como archivo o tómale foto. Si subes uno que ya estaba, el nuevo sustituye al anterior. Los que tienen observación de la Mesa de Registro hay que volver a subirlos corregidos.</p>' : ''}
+      <div id="tarjetas">${req.map(d => tarjetaDoc(d, { existentes, ligas, abierta })).join('')}</div>
+      ${abierta ? `<div class="acciones"><button class="btn" id="subir">Subir los documentos elegidos</button><span class="small muted" id="progreso"></span></div>` : ''}
     </div>`;
-  const b = $('#subir'); if (b) b.onclick = () => subir(folio, correo, slug);
+  if (abierta) {
+    const recoger = activarTarjetas($('#tarjetas'));
+    $('#subir').onclick = () => subir(folio, clave, slug, recoger());
+  }
 }
 
-async function subir(folio, correo, slug) {
-  const f = $('#archivo').files[0]; const err = validarArchivo(f); if (err) return toast(err, 'error');
-  const tipo = $('#tipo').value; const btn = $('#subir'); ocupado(btn, true, 'Subiendo…');
-  try {
-    const ruta = rutaDocumento(slug, folio, tipo, f.name).replace(/(\.[a-z0-9]+)$/i, `-${Date.now()}$1`);
-    await subirArchivo(ruta, f);
-    const { error } = await sb.rpc('registrar_documento_publico', { p_folio: folio, p_correo: correo, p_tipo: tipo, p_archivo_url: ruta, p_nombre_archivo: f.name });
-    if (error) throw error;
-    toast('Documento recibido. Gracias.', 'ok'); consultar();
-  } catch (e) { ocupado(btn, false); toast('No se pudo subir: ' + (e.message || e), 'error'); }
+async function subir(folio, clave, slug, archivos) {
+  if (!archivos.length) return toast('Primero elige un archivo o toma una foto en la tarjeta del documento.', 'error');
+  const btn = $('#subir'); ocupado(btn, true, 'Subiendo…'); let ok = 0;
+  for (const a of archivos) {
+    $('#progreso').textContent = `Subiendo ${DOC_CORTO[a.tipo] || a.tipo}${a.parte ? ' (' + a.parte + ')' : ''}…`;
+    try {
+      const ruta = rutaDocumento(slug, folio, a.tipo + (a.parte ? '-' + a.parte : ''), a.f.name).replace(/(\.[a-z0-9]+)$/i, `-${Date.now()}$1`);
+      await subirArchivo(ruta, a.f);
+      const { error } = await sb.rpc('registrar_documento_publico', { p_folio: folio, p_correo: clave, p_tipo: a.tipo, p_archivo_url: ruta, p_nombre_archivo: a.f.name, p_parte: a.parte });
+      if (error) throw error; ok++;
+    } catch (e) { toast(`No se pudo subir ${DOC_CORTO[a.tipo] || a.tipo}: ${e.message || e}`, 'error'); }
+  }
+  if (ok) toast(`${ok} documento(s) recibido(s). Gracias.`, 'ok');
+  consultar();
 }
 </script>
 </body>

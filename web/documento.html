@@ -11,16 +11,33 @@
 </head>
 <body>
 <header id="cabecera"></header>
-<div class="barra-impresion"><button class="btn secundario chico" onclick="history.back()">Volver</button><button class="btn chico" onclick="window.print()">Imprimir / guardar PDF</button></div>
+<div class="barra-impresion"><button class="btn secundario chico" onclick="history.back()">Volver</button><button class="btn secundario chico" onclick="window.print()">Imprimir</button><button class="btn chico" id="descargar">⬇ Descargar PDF</button></div>
+<div id="instrucciones-firma" class="contenido angosto oculto" style="padding-top:.5rem"></div>
 <div id="doc"><p class="cargando" style="text-align:center">Preparando documento…</p></div>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, esc, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, dinero, DOCS, DOC_CORTO, docsRequeridos, ROOT, CFG } from './assets/app.js';
+import { sb, $, esc, toast, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, dinero, DOCS, DOC_CORTO, docsRequeridos, ROOT, CFG } from './assets/app.js';
 const tipo = param('tipo'), id = param('id'), f = param('f'), c = param('c'); const doc = $('#doc');
 const publico = ['solicitud', 'cedula'].includes(tipo) && f && c;
 let p = null;
-if (!publico) { p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas']); if (!p) throw new Error('sin acceso'); }
+if (!publico) { p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas', 'seccion_organizacion', 'seccion_sg']); if (!p) throw new Error('sin acceso'); }
 await armazon({ titulo: 'Documento' });
+
+// Descarga directa en PDF (html2pdf); si falla, queda Imprimir → Guardar como PDF
+const NOMBRES_PDF = { solicitud: 'Solicitud de afiliacion (Anexo 12 y 13)', cedula: 'Cedula de afiliacion (Anexo 23)', constancia: 'Constancia de Registro (Anexo 15)', gafete: 'Gafete (Anexo 14)', finanzas: 'Carta de Finanzas (AF-09)', dictamen: 'Dictamen FT-001', prevencion: 'Prevencion FT-002', credencial: 'Credencial', comprobante: 'Comprobante de cuota' };
+$('#descargar').onclick = async () => {
+  const btn = $('#descargar'); btn.disabled = true; btn.textContent = 'Preparando PDF…';
+  try {
+    if (!window.html2pdf) await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
+    const nodo = doc.firstElementChild; const nombre = (NOMBRES_PDF[tipo] || 'Documento') + (f ? ' - ' + f : '') + '.pdf';
+    await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: nombre, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'], before: '.salto' } }).from(nodo).save();
+  } catch (e) { toast('No se pudo generar el PDF; usa Imprimir y elige "Guardar como PDF". ' + (e.message || ''), 'error'); }
+  btn.disabled = false; btn.textContent = '⬇ Descargar PDF';
+};
+if (publico) {
+  $('#instrucciones-firma').classList.remove('oculto');
+  $('#instrucciones-firma').innerHTML = `<div class="aviso small"><b>Cómo firmar este documento.</b> 1) Descárgalo o imprímelo. 2) Fírmalo <b>con tinta azul</b>, igual que la firma de tu INE${tipo === 'solicitud' ? ', <b>en los dos lugares</b>: al final de la manifestación (hoja 3) y al final del aviso de privacidad (hoja 4)' : ', al final de la hoja 2'}. 3) Tómale foto o escanéalo y súbelo en "Consultar mi trámite" con tu folio y tu nombre. Sin firma insertada como imagen ni tachaduras.</div>`;
+}
 
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const partes = d => { const [a, m, dd] = String(d || hoy()).slice(0, 10).split('-'); return { d: parseInt(dd), mes: MESES[parseInt(m) - 1], a }; };

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Solicitud · CEN · SITAD</title>
+<title>Solicitud · SITAD</title>
 <link rel="icon" href="../assets/sitad-mark.png">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
@@ -12,59 +12,82 @@
 <body>
 <header id="cabecera"></header>
 <main class="contenido">
-  <p class="small"><a href="./">← Bandeja de solicitudes</a></p>
+  <p class="small"><a href="#" id="volver">← Volver</a></p>
   <div id="vista"><p class="cargando">Cargando…</p></div>
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, docsRequeridos, DOC_NOMBRE, DOC_CORTO, ESTADO_INFO, SEMAFORO_TXT, urlFirmada, subirArchivo, validarArchivo, rutaDocumento, mailto, correoAcuse, correoPrevencion, correoFavorable, correoDesfavorable, correoAlta, correoAlSG, ROOT, CFG } from '../assets/app.js';
-const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas']); if (!p) throw new Error('sin acceso');
-await armazon({ titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
-const esOrg = p.rol === 'cen_organizacion'; const id = param('id'); const vista = $('#vista');
-let s, docs, pad, correoSG = '';
+import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, docsRequeridos, DOC_NOMBRE, DOC_CORTO, ESTADO_INFO, SEMAFORO_TXT, urlFirmada, subirArchivo, validarArchivo, rutaDocumento, mailto, whatsapp, ligaTramite, correoAcuse, correoPrevencion, correoFavorable, correoDesfavorable, correoAlta, correoAlSG, correoFinanzas, waAcuse, waPrevencion, waFavorable, waDesfavorable, waAlta, ROOT, CFG } from '../assets/app.js';
+import { tarjetaDoc, activarTarjetas } from '../assets/docs-ui.js';
+const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas', 'seccion_organizacion', 'seccion_sg']); if (!p) throw new Error('sin acceso');
+const esSeccion = ['seccion_organizacion', 'seccion_sg'].includes(p.rol);
+await armazon(esSeccion ? { titulo: p.secciones ? p.secciones.denominacion : 'Sección' } : { titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
+$('#volver').href = esSeccion ? ROOT + 'seccion/' : ROOT + 'cen/';
+const esOrg = p.rol === 'cen_organizacion'; const puedeSubir = esOrg || p.rol === 'seccion_organizacion'; const id = param('id'); const vista = $('#vista');
+let s, docs, pad, correoSG = '', cfg = {};
 const dd = (k, val) => `<dt>${k}</dt><dd>${val == null || val === '' ? '—' : val}</dd>`;
+const enviar = (titulo, tel, correo, asunto, cuerpoCorreo, cuerpoWa, cc) => `<div class="envio"><span class="small"><b>${titulo}</b></span> <a class="btn wa chico" href="${whatsapp(tel, cuerpoWa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(correo, asunto, cuerpoCorreo, cc)}">Correo</a></div>`;
 await cargar();
 
 async function cargar() {
-  const [r1, r2, r3, r4] = await Promise.all([
+  const [r1, r2, r3, r4, r5] = await Promise.all([
     sb.from('v_solicitudes').select('*').eq('id', id).single(),
     sb.from('solicitud_documentos').select('*').eq('solicitud_id', id).order('created_at'),
     sb.from('v_padron').select('*').eq('solicitud_id', id).maybeSingle(),
-    sb.from('usuarios_roles').select('email').eq('rol', 'sg').eq('activo', true).not('email', 'like', '%@sitad.test').limit(1),
+    esSeccion ? Promise.resolve({ data: [] }) : sb.from('usuarios_roles').select('email').eq('rol', 'sg').eq('activo', true).not('email', 'like', '%@sitad.test').limit(1),
+    esSeccion ? Promise.resolve({ data: [] }) : sb.from('configuracion').select('clave, valor'),
   ]);
   if (r1.error || !r1.data) { vista.innerHTML = `<div class="aviso error">No se encontró la solicitud.</div>`; return; }
   s = r1.data; docs = r2.data || []; pad = r3.data; correoSG = r4.data && r4.data[0] ? r4.data[0].email : ''; s.documentos = docs;
+  cfg = Object.fromEntries((r5.data || []).map(x => [x.clave, x.valor]));
   render();
 }
-
 function render() {
   const cerrada = ['Ejecutada en padrón', 'Dictaminada desfavorable', 'Desistida'].includes(s.estado);
+  const abierta = ['Recibida', 'Prevenida', 'Subsanada'].includes(s.estado);
   const req = docsRequeridos(s.actividad_transporte);
-  const faltan = req.filter(d => !docs.find(x => x.tipo === d.tipo));
+  const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
+  const presente = d => d.partes ? d.partes.every(([pt]) => existentes[d.tipo + '|' + pt]) : !!existentes[d.tipo + '|'];
+  const faltan = req.filter(d => !presente(d));
   const alertas = [];
+  if (s.con_novedad) alertas.push('NOVEDAD: la persona o la Sección subió documentos después de la última revisión. Revísalos y marca "Revisado".');
   if (s.es_confianza) alertas.push('La persona declaró desempeñar funciones de confianza. Verifica antes de dictaminar: los trabajadores de confianza legalmente excluidos no pueden afiliarse.');
   if (s.duplicado) alertas.push('Posible duplicado: hay otra solicitud viva o un afiliado activo con la misma CURP o el mismo correo. Si es la misma persona, no se abre nuevo trámite: responde indicando el folio existente.');
   if (!s.documentos_completos && !cerrada) alertas.push(`Expediente incompleto: faltan ${faltan.map(d => d.corto).join(', ')}.`);
   if (s.fuera_de_plazo) alertas.push('Esta solicitud está fuera del plazo estatutario. Atiéndela hoy.');
   const dep = Array.isArray(s.dependientes) ? s.dependientes : [];
-  const q = `id=${s.id}`;
+  const q = `id=${s.id}`; const tel = s.telefono; const pv = correoPrevencion(s, faltantesGuardados());
+  const padC = pad ? { ...pad, seccion: s.seccion, seccion_numero: s.seccion_numero, asamblea_fecha_hora: s.asamblea_fecha_hora, asamblea_direccion: s.asamblea_direccion, convocatoria_url: s.convocatoria_url } : null;
   vista.innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem">
-    <div><p class="small muted mb-0">${esc(s.seccion)}${s.seccion_numero ? ' (Sección ' + s.seccion_numero + ')' : ' (sin número: folio por clave ' + esc(s.seccion_clave) + ')'} · ${s.canal === 'publico' ? 'capturada por la persona desde la liga pública' : 'registrada por la Sección'} · ${esc(s.tipo_movimiento)}</p>
-      <h1>${esc(s.folio)} <span class="etiqueta ${(ESTADO_INFO[s.estado] || {}).etiqueta || ''}">${esc(s.estado)}</span></h1>
-      <p class="mb-0"><span class="punto ${s.semaforo}"></span>${esc(SEMAFORO_TXT[s.semaforo] || '')}${s.actividad_transporte ? ' · <span class="etiqueta azul">transporte: 8 documentos</span>' : ''}</p></div>
+    <div><p class="small muted mb-0">${esc(s.seccion)}${s.seccion_numero ? ' (Sección ' + s.seccion_numero + ')' : ' (sin número: folio por clave ' + esc(s.seccion_clave) + ')'} · ${s.canal === 'publico' ? 'capturada por la persona desde la liga' : 'registrada por la Sección'} · ${esc(s.tipo_movimiento)}</p>
+      <h1>${esc(s.folio)} <span class="etiqueta ${(ESTADO_INFO[s.estado] || {}).etiqueta || ''}">${esc(s.estado)}</span>${s.con_novedad ? ' <span class="etiqueta novedad">novedad</span>' : ''}</h1>
+      <p class="mb-0"><b>${esc(s.nombre_completo)}</b> · <span class="punto ${s.semaforo}"></span>${esc(SEMAFORO_TXT[s.semaforo] || '')}${s.actividad_transporte ? ' · <span class="etiqueta azul">transporte: 8 documentos</span>' : ''}</p>
+      <p class="small mb-0">📱 ${esc(tel || 'sin teléfono')} ${tel ? `<a class="btn wa chico" href="${whatsapp(tel, 'Hola, ' + s.nombre_completo.split(' ')[0] + '. Te escribimos de la Secretaría de Organización del SITAD sobre tu solicitud de afiliación, folio ' + s.folio + '.')}" target="_blank">WhatsApp</a>` : ''} · ✉ <a href="${mailto(s.correo, 'SITAD · Folio ' + s.folio, '')}">${esc(s.correo)}</a></p></div>
     <div class="small muted" style="text-align:right">Recibida el ${fechaLarga(s.fecha_recepcion)}<br>Límite para dictaminar: <b>${fecha(s.limite_dictamen)}</b>${s.limite_ejecucion ? `<br>Límite para ejecutar el alta: <b>${fecha(s.limite_ejecucion)}</b>` : ''}${s.asamblea_fecha_hora ? `<br>Asamblea constitutiva: <b>${esc(fechaHoraLarga(s.asamblea_fecha_hora))}</b>` : ''}</div>
   </div>
-  ${alertas.map(a => `<div class="aviso ${/fuera del plazo|duplicado|confianza/.test(a) ? 'error' : 'atencion'} small">${esc(a)}</div>`).join('')}
+  ${alertas.map(a => `<div class="aviso ${/fuera del plazo|duplicado|confianza/.test(a) ? 'error' : /NOVEDAD/.test(a) ? '' : 'atencion'} small">${esc(a)}</div>`).join('')}
 
   <div class="ficha mt-2">
     <div>
       <div class="tarjeta">
-        <h3>Persona solicitante <span class="tiny muted">(datos del Anexo 23 y de la manifestación)</span></h3>
+        <h3>Expediente (${req.filter(presente).length} de ${req.length}) <span class="tiny muted">· se revisa aquí mismo, documento por documento</span></h3>
+        <p class="small muted">Formatos prellenados con los datos capturados: <a href="${ROOT}documento.html?tipo=solicitud&${q}" target="_blank">Anexo 12 y 13</a> · <a href="${ROOT}documento.html?tipo=cedula&${q}" target="_blank">Anexo 23</a>.</p>
+        <div class="visor" id="visor">${req.map(d => (d.partes ? d.partes : [[null, null]]).map(([pt, nombrePt]) => { const x = existentes[d.tipo + '|' + (pt || '')]; const titulo = esc(d.nombre) + (nombrePt ? ' · ' + esc(nombrePt) : ''); return `
+          <div class="visor-doc" data-docid="${x ? x.id : ''}" data-tipo="${d.tipo}" data-parte="${pt || ''}">
+            <div class="visor-cab"><span><span class="punto ${x ? (x.validado === false ? 'amarillo' : x.validado ? 'verde' : 'azul') : 'rojo'}"></span><b>${titulo}</b>${x ? `<span class="tiny muted"> · ${esc(x.nombre_archivo || '')} · ${fecha(x.created_at)}</span>` : ' <span class="tiny rojo">Falta</span>'}</span>
+              <span>${x ? `<a href="#" class="btn discreto chico" data-abrir="${x.id}">Abrir en pestaña</a>` : ''}${puedeSubir && abierta ? `<label class="btn discreto chico" style="cursor:pointer">${x ? 'Reemplazar' : 'Subir'}<input type="file" class="oculto" data-subir="${d.tipo}" data-parte="${pt || ''}" accept="application/pdf,image/jpeg,image/png"></label>` : ''}</span></div>
+            ${x ? `<div class="visor-cuerpo" data-ver="${x.id}"><span class="cargando" style="color:#ddd">Cargando documento…</span></div>` : ''}
+            ${x && esOrg && !cerrada ? `<div class="visor-pie"><button class="btn ${x.validado ? 'verde' : 'secundario'} chico" data-ok="${x.id}">${x.validado ? '✓ Correcto' : 'Marcar correcto'}</button><textarea data-obs="${x.id}" placeholder="Observación para la persona (qué está mal y cómo debe venir). Se muestra en su consulta y entra en la prevención.">${esc(x.observacion || '')}</textarea><button class="btn secundario chico" data-guardar-obs="${x.id}">Guardar observación</button></div>` : x && x.observacion ? `<div class="visor-pie small" style="color:var(--ambar)"><b>Observación:</b> ${esc(x.observacion)}</div>` : ''}
+          </div>`; }).join('')).join('')}</div>
+        ${s.expediente_url ? `<p class="small mt-2">Expediente definitivo en Drive: <a href="${esc(s.expediente_url)}" target="_blank">${esc(s.expediente_url)}</a></p>` : ''}
+      </div>
+
+      <div class="tarjeta">
+        <h3>Datos capturados <span class="tiny muted">(Anexo 23 y manifestación)</span></h3>
         <dl class="datos">
-          ${dd('Nombre', '<b>' + esc(s.nombre_completo) + '</b>')}${dd('CURP · RFC', esc(s.curp || '—') + ' · ' + esc(s.rfc || '—'))}${dd('Nacimiento · género · estado civil', fecha(s.fecha_nacimiento) + ' · ' + esc(s.genero || '—') + ' · ' + esc(s.estado_civil || '—'))}
+          ${dd('CURP · RFC', esc(s.curp || '—') + ' · ' + esc(s.rfc || '—'))}${dd('Nacimiento · género · estado civil', fecha(s.fecha_nacimiento) + ' · ' + esc(s.genero || '—') + ' · ' + esc(s.estado_civil || '—'))}
           ${dd('Domicilio', [s.domicilio, s.colonia, s.cp ? 'C.P. ' + s.cp : '', s.municipio, s.estado_domicilio].filter(Boolean).map(esc).join(', '))}
-          ${dd('Celular · e-mail', esc(s.telefono || '—') + ' · <a href="' + mailto(s.correo, correoAcuse(s).asunto, correoAcuse(s).cuerpo) + '">' + esc(s.correo) + '</a>')}
           ${dd('Seguridad social', 'NSS ' + esc(s.nss || '—') + ' · ' + esc(s.unidad_medica || '—') + (s.unidad_medica_ciudad ? ', ' + esc(s.unidad_medica_ciudad) : ''))}
           ${dd('Situación profesional', esc(s.escolaridad || '—') + (s.escolaridad_estado ? ' (' + esc(s.escolaridad_estado) + ')' : '') + ' · ' + esc(s.carrera || '—'))}
           ${dd('Empresa', esc(s.empresa) + ' · ' + esc(s.puesto || '—') + (s.fecha_inicio_relacion ? ' · ingreso ' + fecha(s.fecha_inicio_relacion) : '') + ' · ' + esc(s.frecuencia_pago || '—'))}
@@ -78,25 +101,16 @@ function render() {
         ${esOrg && !cerrada ? `<div class="acciones"><button class="btn discreto chico" id="a-transporte">${s.actividad_transporte ? 'Quitar la marca de transporte' : 'Marcar como transporte (pide 3 documentos más)'}</button></div>` : ''}
       </div>
 
-      <div class="tarjeta">
-        <h3>Expediente (${req.filter(d => docs.find(x => x.tipo === d.tipo)).length} de ${req.length})</h3>
-        <p class="small muted">Formatos del SG prellenados con los datos capturados: <a href="${ROOT}documento.html?tipo=solicitud&${q}" target="_blank">Anexo 12 y 13</a> · <a href="${ROOT}documento.html?tipo=cedula&${q}" target="_blank">Anexo 23</a>. La persona los firma y sube el PDF firmado.</p>
-        <ul class="doc-lista" id="docs">${req.map(d => { const x = docs.find(q => q.tipo === d.tipo); return `<li>
-          <span class="punto ${x ? (x.validado === false ? 'amarillo' : x.validado ? 'verde' : 'azul') : 'rojo'}"></span>
-          <span class="nombre">${esc(d.nombre)}${x ? `<br><span class="tiny muted">${esc(x.nombre_archivo || '')} · ${fecha(x.created_at)}${x.observacion ? ' · <span style="color:var(--ambar)">' + esc(x.observacion) + '</span>' : ''}</span>` : '<br><span class="tiny rojo">Falta</span>'}</span>
-          ${x ? `<a href="#" class="btn secundario chico" data-ver="${x.id}">Ver</a>` : ''}
-          ${x && esOrg && !cerrada ? `<button class="btn discreto chico" data-ok="${x.id}">${x.validado ? '✓ Correcto' : 'Dar por bueno'}</button><button class="btn discreto chico" data-obs="${x.id}">Observación</button>` : ''}
-          ${esOrg && !cerrada ? `<label class="btn discreto chico" style="cursor:pointer">${x ? 'Reemplazar' : 'Subir'}<input type="file" class="oculto" data-subir="${d.tipo}" accept="application/pdf,image/jpeg,image/png"></label>` : ''}
-        </li>`; }).join('')}</ul>
-        ${docs.filter(x => !req.find(d => d.tipo === x.tipo)).length ? `<p class="small muted mt-2">Otros archivos: ${docs.filter(x => !req.find(d => d.tipo === x.tipo)).map(x => `<a href="#" data-ver="${x.id}">${esc(DOC_CORTO[x.tipo] || x.tipo)}</a>`).join(' · ')}</p>` : ''}
-        ${s.expediente_url ? `<p class="small mt-2">Expediente definitivo en Drive: <a href="${esc(s.expediente_url)}" target="_blank">${esc(s.expediente_url)}</a></p>` : ''}
+      ${esOrg ? `<div class="tarjeta">
+        <h3>Mensaje para la persona <span class="tiny muted">(lo ve en "Consultar mi trámite")</span></h3>
+        <textarea id="mensaje">${esc(s.mensaje_publico || '')}</textarea>
+        <div class="acciones"><button class="btn secundario chico" id="guardar-mensaje">Guardar mensaje</button><span class="small muted">Sirve para avisos puntuales de este folio. Los faltantes se comunican con la prevención.</span></div>
       </div>
-
       <div class="tarjeta">
         <h3>Notas internas</h3>
-        <textarea id="notas" ${esOrg ? '' : 'disabled'}>${esc(s.notas || '')}</textarea>
-        ${esOrg ? '<div class="acciones"><button class="btn secundario chico" id="guardar-notas">Guardar notas</button></div>' : ''}
-      </div>
+        <textarea id="notas">${esc(s.notas || '')}</textarea>
+        <div class="acciones"><button class="btn secundario chico" id="guardar-notas">Guardar notas</button></div>
+      </div>` : ''}
     </div>
 
     <div class="lateral">
@@ -109,61 +123,75 @@ function render() {
           <li class="${s.fecha_dictamen ? 'hecho' : ''}"><b>Dictamen ${s.sentido ? '· ' + esc(s.sentido) : ''}</b><span>${s.fecha_dictamen ? fechaLarga(s.fecha_dictamen) : 'Pendiente · límite ' + fecha(s.limite_dictamen)}</span></li>
           ${s.sentido === 'Favorable' || s.fecha_envio_sg ? `<li class="${s.fecha_envio_sg ? 'hecho' : ''}"><b>Enviada al Secretario General</b><span>${s.fecha_envio_sg ? fechaLarga(s.fecha_envio_sg) : 'Pendiente'}</span></li>` : ''}
           ${s.sentido === 'Favorable' ? `<li class="${s.fecha_autorizacion_sg ? 'hecho' : ''}"><b>Autorización del SG</b><span>${s.fecha_autorizacion_sg ? fechaLarga(s.fecha_autorizacion_sg) + (s.autorizacion_sg_ref ? ' · ' + esc(s.autorizacion_sg_ref) : '') : 'Pendiente'}</span></li>` : ''}
-          ${s.sentido === 'Favorable' ? `<li class="${s.fecha_ejecucion_padron ? 'hecho' : ''}"><b>Alta en el Padrón</b><span>${s.fecha_ejecucion_padron ? fechaLarga(s.fecha_ejecucion_padron) + (pad ? ' · No. ' + pad.numero_afiliacion : '') : (s.limite_ejecucion ? 'Pendiente · límite ' + fecha(s.limite_ejecucion) : 'Pendiente')}</span></li>` : ''}
+          ${s.sentido === 'Favorable' ? `<li class="${s.fecha_ejecucion_padron ? 'hecho' : ''}"><b>Alta en el Padrón</b><span>${s.fecha_ejecucion_padron ? fechaLarga(s.fecha_ejecucion_padron) + (pad ? ' · No. ' + pad.numero_afiliacion : '') : 'Automática al autorizar el SG'}</span></li>` : ''}
         </ol>
       </div>
       <div class="tarjeta" id="acciones-caja"><h3>Acciones</h3>${accionesHtml(cerrada)}</div>
       <div class="tarjeta">
-        <h3>Documentos y correos</h3>
-        <ul class="small" style="padding-left:1.1rem;margin:0">
-          <li><a href="${mailto(s.correo, correoAcuse(s).asunto, correoAcuse(s).cuerpo)}">Correo 1 · Acuse de recepción</a></li>
-          ${s.fecha_prevencion ? `<li><a href="${ROOT}documento.html?tipo=prevencion&${q}" target="_blank">FT-002 · Prevención (imprimir)</a> · <a href="${mailto(s.correo, correoPrevencion(s, faltantesGuardados()).asunto, correoPrevencion(s, faltantesGuardados()).cuerpo)}">Correo 2</a></li>` : ''}
-          ${s.fecha_dictamen ? `<li><a href="${ROOT}documento.html?tipo=dictamen&${q}" target="_blank">FT-001 · Dictamen (imprimir)</a> · <a href="${s.sentido === 'Favorable' ? mailto(s.correo, correoFavorable(s).asunto, correoFavorable(s).cuerpo) : mailto(s.correo, correoDesfavorable(s).asunto, correoDesfavorable(s).cuerpo)}">Correo ${s.sentido === 'Favorable' ? '3' : '4'}</a></li>` : ''}
-          ${s.sentido === 'Favorable' && !s.fecha_autorizacion_sg ? `<li><a href="${mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo)}">Remitir al Secretario General</a></li>` : ''}
-          ${pad ? `<li><b>Al alta:</b> <a href="${ROOT}documento.html?tipo=constancia&id=${pad.id}" target="_blank">Constancia de Registro (Anexo 15)</a> · <a href="${ROOT}documento.html?tipo=gafete&id=${pad.id}" target="_blank">Gafete (Anexo 14)</a> · <a href="${ROOT}documento.html?tipo=finanzas&id=${pad.id}" target="_blank">Carta de Finanzas (AF-09)</a> · <a href="${ROOT}documento.html?tipo=credencial&id=${pad.id}" target="_blank">Credencial</a></li>
-          <li><a href="${mailto(s.correo, correoAlta({ ...pad, seccion: s.seccion }, s).asunto, correoAlta({ ...pad, seccion: s.seccion }, s).cuerpo)}">Correo ${s.asamblea_fecha_hora ? '4 (AF-04b) · Alta e información para la asamblea' : '5 · Bienvenida'}</a> · <a href="${mailto(CFG.CORREO_FINANZAS, 'SITAD · Alta en el Padrón · ' + pad.folio, correoAlta({ ...pad, seccion: s.seccion }, s).finanzas)}">Aviso a Finanzas</a></li>` : ''}
-        </ul>
-        <p class="tiny muted mt-2">Los correos se abren prellenados en tu programa de correo hasta que exista el buzón institucional en sindicatodigital.org.</p>
+        <h3>Enviar a la persona <span class="tiny muted">(plantillas del SG · WhatsApp o correo)</span></h3>
+        ${enviar('1 · Acuse de recepción', tel, s.correo, correoAcuse(s).asunto, correoAcuse(s).cuerpo, waAcuse(s))}
+        ${s.fecha_prevencion ? enviar('2 · Prevención (faltantes + liga para corregir)', tel, s.correo, pv.asunto, pv.cuerpo, waPrevencion(s, faltantesGuardados())) + `<p class="tiny"><a href="${ROOT}documento.html?tipo=prevencion&${q}" target="_blank">FT-002 · Prevención (imprimir)</a></p>` : ''}
+        ${s.fecha_dictamen && s.sentido === 'Favorable' ? enviar('3 · Dictamen favorable', tel, s.correo, correoFavorable(s).asunto, correoFavorable(s).cuerpo, waFavorable(s)) : ''}
+        ${s.fecha_dictamen && s.sentido === 'Desfavorable' ? enviar('4 · Dictamen desfavorable', tel, s.correo, correoDesfavorable(s).asunto, correoDesfavorable(s).cuerpo, waDesfavorable(s)) : ''}
+        ${s.fecha_dictamen ? `<p class="tiny"><a href="${ROOT}documento.html?tipo=dictamen&${q}" target="_blank">FT-001 · Dictamen (imprimir)</a>${s.sentido === 'Favorable' && !s.fecha_autorizacion_sg && !esSeccion ? ` · <a href="${mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo)}">Remitir al Secretario General</a>` : ''}</p>` : ''}
+        ${padC ? enviar(s.asamblea_fecha_hora ? '5 · Alta e información para la asamblea' : '5 · Alta y bienvenida', tel, s.correo, correoAlta(padC, s).asunto, correoAlta(padC, s).cuerpo, waAlta(padC, s)) + `
+          <p class="tiny"><b>Adjunta a ese mensaje:</b> <a href="${ROOT}documento.html?tipo=constancia&id=${pad.id}" target="_blank">Constancia (Anexo 15)</a> · <a href="${ROOT}documento.html?tipo=gafete&id=${pad.id}" target="_blank">Gafete (Anexo 14)</a> · <a href="${ROOT}documento.html?tipo=credencial&id=${pad.id}" target="_blank">Credencial</a> · <a href="${ROOT}documento.html?tipo=finanzas&id=${pad.id}" target="_blank">Carta de Finanzas (AF-09)</a>. Descárgalos en PDF con el botón de cada documento.</p>
+          ${!esSeccion ? enviar('6 · Cuota sindical (carta AF-09)', tel, s.correo, correoFinanzas(padC, cfg).asunto, correoFinanzas(padC, cfg).cuerpo, correoFinanzas(padC, cfg).cuerpo) + `<p class="tiny"><a href="${mailto(CFG.CORREO_FINANZAS, 'SITAD · Alta en el Padrón · ' + pad.folio, correoAlta(padC, s).finanzas)}">Aviso interno a Finanzas</a></p>` : ''}` : ''}
+        <p class="tiny muted mt-2">WhatsApp abre WhatsApp Web o la app con el número de la persona y el mensaje ya escrito; tú solo pulsas enviar. Los correos se abren en tu programa de correo hasta que exista el buzón institucional.</p>
       </div>
     </div>
   </div>`;
-  enlazar(cerrada, req);
+  enlazar(cerrada, abierta, req);
+  cargarVisores();
 }
 
 function faltantesGuardados() { const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCION\]/.exec(s.notas || ''); return m ? m[1].trim().split('\n').filter(Boolean) : ['Ver oficio de prevención.']; }
 
 function accionesHtml(cerrada) {
-  if (!esOrg) return '<p class="small muted">Solo lectura.</p>';
-  if (cerrada) return `<p class="small muted">Trámite concluido.</p>`;
+  if (!esOrg) return `<p class="small muted">${esSeccion ? 'Como Sección puedes ver el expediente, subir o reemplazar documentos por la persona y escribirle por WhatsApp o correo. El dictamen y el alta los lleva el CEN.' : 'Solo lectura.'}</p>`;
   const b = [];
+  if (s.con_novedad) b.push(`<button class="btn secundario" id="a-revisado">Marcar como revisado (quitar novedad)</button>`);
+  if (cerrada) { b.push(`<p class="small muted">Trámite concluido.</p>`); return `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div>`; }
   if (['Recibida', 'Subsanada'].includes(s.estado)) {
-    if (!s.fecha_prevencion) b.push(`<button class="btn secundario" id="a-prevenir">Prevenir (una sola vez)</button>`);
-    b.push(`<button class="btn" id="a-favorable">Dictaminar FAVORABLE</button>`, `<button class="btn secundario" id="a-desfavorable">Dictaminar desfavorable</button>`);
+    if (!s.fecha_prevencion) b.push(`<button class="btn secundario" id="a-prevenir">Prevenir: pedir lo que falta (una sola vez)</button>`);
+    b.push(`<button class="btn" id="a-favorable">Validar: dictamen FAVORABLE → al Secretario General</button>`, `<button class="btn secundario" id="a-desfavorable">Dictaminar desfavorable</button>`);
   }
   if (s.estado === 'Prevenida') b.push(`<button class="btn" id="a-subsanada">Registrar subsanación recibida</button>`, `<button class="btn secundario" id="a-desfavorable">Dictaminar desfavorable (no subsanó)</button>`);
   if (s.estado === 'Dictaminada favorable') b.push(`<button class="btn" id="a-enviar-sg">Marcar como enviada al SG</button>`);
-  if (s.estado === 'Enviada al SG') b.push(`<p class="small muted">En espera de la autorización del Secretario General (desde ${fecha(s.fecha_envio_sg)}). Él la registra en su bandeja; si te la comunica por otro medio, anótala aquí:</p><button class="btn secundario" id="a-autorizacion-externa">Registrar autorización recibida por otro medio</button>`);
-  if (s.estado === 'Autorizada') b.push(`<button class="btn verde" id="a-alta">Ejecutar alta en el Padrón</button>`);
+  if (s.estado === 'Enviada al SG') b.push(`<p class="small muted">En espera de la autorización del Secretario General (desde ${fecha(s.fecha_envio_sg)}). Al autorizar, el alta en el Padrón es automática y aquí aparecen la constancia, el gafete y la carta de Finanzas listos para enviar. Si te la comunica por otro medio:</p><button class="btn secundario" id="a-autorizacion-externa">Registrar autorización recibida por otro medio</button>`);
+  if (s.estado === 'Autorizada' && !pad) b.push(`<button class="btn verde" id="a-alta">Ejecutar alta en el Padrón</button>`);
   b.push(`<button class="btn discreto chico" id="a-desistir">Registrar desistimiento</button>`);
   return `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div>`;
 }
 
-function enlazar(cerrada, req) {
-  $$('[data-ver]').forEach(a => a.onclick = async e => { e.preventDefault(); const d = docs.find(x => x.id === a.dataset.ver); try { const u = await urlFirmada(d.archivo_url); window.open(u, '_blank'); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } });
+async function cargarVisores() {
+  for (const caja of $$('[data-ver]')) {
+    const d = docs.find(x => x.id === caja.dataset.ver); if (!d) continue;
+    try {
+      const u = await urlFirmada(d.archivo_url, 1800); const esPdf = /\.pdf(\?|$)/i.test(d.archivo_url) || /pdf/i.test(d.nombre_archivo || '');
+      caja.innerHTML = esPdf ? `<iframe src="${u}#toolbar=0&view=FitH" title="${esc(d.nombre_archivo || '')}"></iframe>` : `<img src="${u}" alt="${esc(d.nombre_archivo || '')}" loading="lazy">`;
+    } catch (e) { caja.innerHTML = `<span class="small" style="color:#f88">No se pudo mostrar: ${esc(e.message || e)}</span>`; }
+  }
+}
+
+function enlazar(cerrada, abierta, req) {
+  $$('[data-abrir]').forEach(a => a.onclick = async e => { e.preventDefault(); const d = docs.find(x => x.id === a.dataset.abrir); try { window.open(await urlFirmada(d.archivo_url), '_blank'); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } });
   $$('[data-ok]').forEach(b => b.onclick = async () => { const d = docs.find(x => x.id === b.dataset.ok); const { error } = await sb.from('solicitud_documentos').update({ validado: !d.validado, observacion: d.validado ? d.observacion : null }).eq('id', d.id); if (error) toast(error.message, 'error'); else cargar(); });
-  $$('[data-obs]').forEach(b => b.onclick = async () => { const d = docs.find(x => x.id === b.dataset.obs); const o = prompt('Observación sobre este documento (se muestra a la persona en "Consultar mi trámite"):', d.observacion || ''); if (o === null) return; const { error } = await sb.from('solicitud_documentos').update({ observacion: o || null, validado: o ? false : d.validado }).eq('id', d.id); if (error) toast(error.message, 'error'); else cargar(); });
-  $$('[data-subir]').forEach(inp => inp.onchange = async () => { const f = inp.files[0]; const err = validarArchivo(f); if (err) return toast(err, 'error'); try {
-      const ruta = rutaDocumento(s.seccion_slug, s.folio, inp.dataset.subir, f.name).replace(/(\.[a-z0-9]+)$/i, `-${Date.now()}$1`); await subirArchivo(ruta, f);
-      const prev = docs.find(x => x.tipo === inp.dataset.subir); if (prev) await sb.from('solicitud_documentos').delete().eq('id', prev.id);
-      const { error } = await sb.from('solicitud_documentos').insert({ solicitud_id: s.id, tipo: inp.dataset.subir, archivo_url: ruta, nombre_archivo: f.name }); if (error) throw error;
+  $$('[data-guardar-obs]').forEach(b => b.onclick = async () => { const idd = b.dataset.guardarObs; const o = $(`[data-obs="${idd}"]`).value.trim(); const { error } = await sb.from('solicitud_documentos').update({ observacion: o || null, validado: o ? false : null }).eq('id', idd); if (error) toast(error.message, 'error'); else { toast(o ? 'Observación guardada; la persona la ve en su consulta.' : 'Observación borrada.', 'ok'); cargar(); } });
+  $$('[data-subir]').forEach(inp => inp.onchange = async () => { const f = inp.files[0]; const err = validarArchivo(f); if (err) return toast(err, 'error'); const parte = inp.dataset.parte || null; try {
+      const ruta = rutaDocumento(s.seccion_slug, s.folio, inp.dataset.subir + (parte ? '-' + parte : ''), f.name).replace(/(\.[a-z0-9]+)$/i, `-${Date.now()}$1`); await subirArchivo(ruta, f);
+      const prev = docs.find(x => x.tipo === inp.dataset.subir && (x.parte || null) === parte); if (prev) { const { error: e0 } = await sb.from('solicitud_documentos').delete().eq('id', prev.id); if (e0) throw e0; }
+      const { error } = await sb.from('solicitud_documentos').insert({ solicitud_id: s.id, tipo: inp.dataset.subir, parte, archivo_url: ruta, nombre_archivo: f.name }); if (error) throw error;
       if (s.estado === 'Prevenida' && !s.fecha_subsanacion) await sb.from('solicitudes_afiliacion').update({ fecha_subsanacion: hoy() }).eq('id', s.id);
       toast('Documento guardado.', 'ok'); cargar(); } catch (e) { toast('No se pudo subir: ' + (e.message || e), 'error'); } });
-  const gn = $('#guardar-notas'); if (gn) gn.onclick = () => actualizar({ notas: $('#notas').value }, 'Notas guardadas.');
   const on = (i, fn) => { const b = $('#' + i); if (b) b.onclick = fn; };
+  on('guardar-notas', () => actualizar({ notas: $('#notas').value }, 'Notas guardadas.'));
+  on('guardar-mensaje', () => actualizar({ mensaje_publico: $('#mensaje').value.trim() || null }, 'Mensaje guardado; la persona lo ve en su consulta.'));
+  on('a-revisado', () => actualizar({ revisado_at: new Date().toISOString() }, 'Marcada como revisada.'));
   on('a-transporte', () => actualizar({ actividad_transporte: !s.actividad_transporte }, 'Marca de transporte actualizada; el expediente se recalculó.'));
   on('a-prevenir', () => prevenir(req)); on('a-favorable', favorable); on('a-desfavorable', desfavorable); on('a-subsanada', () => actualizar({ fecha_subsanacion: hoy() }, 'Subsanación registrada; el plazo se reanuda.'));
   on('a-enviar-sg', () => actualizar({ fecha_envio_sg: hoy() }, 'Marcada como enviada al SG.', true));
-  on('a-autorizacion-externa', () => { const ref = prompt('¿Cómo autorizó el Secretario General? (oficio, correo o mensaje y fecha). Queda como referencia de la autorización.'); if (!ref) return; const f = prompt('Fecha de la autorización (aaaa-mm-dd):', hoy()); if (!f) return; sb.rpc('registrar_autorizacion_externa', { p_id: s.id, p_fecha: f, p_ref: ref }).then(({ error }) => { if (error) toast('No se pudo registrar: ' + error.message, 'error'); else { toast('Autorización registrada.', 'ok'); cargar(); } }); });
+  on('a-autorizacion-externa', () => { const ref = prompt('¿Cómo autorizó el Secretario General? (oficio, correo o mensaje y fecha). Queda como referencia de la autorización.'); if (!ref) return; const f = prompt('Fecha de la autorización (aaaa-mm-dd):', hoy()); if (!f) return; sb.rpc('registrar_autorizacion_externa', { p_id: s.id, p_fecha: f, p_ref: ref }).then(({ error }) => { if (error) toast('No se pudo registrar: ' + error.message, 'error'); else { toast('Autorización registrada; el alta se ejecutó en automático.', 'ok'); cargar(); } }); });
   on('a-alta', alta); on('a-desistir', () => { if (!confirm('¿Registrar desistimiento? La solicitud queda sin efectos.')) return; actualizar({ fecha_dictamen: hoy(), sentido: 'Desistimiento' }, 'Desistimiento registrado.'); });
 }
 
@@ -174,47 +202,48 @@ async function actualizar(cambios, msg, abrirSG) {
   if (abrirSG) window.open(mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo), '_blank');
 }
 async function prevenir(req) {
-  const faltan = req.filter(d => !docs.find(x => x.tipo === d.tipo)).map(d => d.nombre);
-  const conObs = docs.filter(d => d.observacion).map(d => `${DOC_NOMBRE[d.tipo] || d.tipo}: ${d.observacion}`);
-  const sugerido = [...faltan.map(f => `Falta: ${f}; remítalo por el medio institucional indicando su folio.`), ...conObs];
-  const texto = prompt('Puntos de la prevención, uno por renglón (se numeran PRIMERO, SEGUNDO…). Puedes editar:', sugerido.join('\n'));
+  const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
+  const faltan = [];
+  for (const d of req) { if (d.partes) { for (const [pt, n] of d.partes) if (!existentes[d.tipo + '|' + pt]) faltan.push(`${d.nombre}: falta ${n.toLowerCase()}`); } else if (!existentes[d.tipo + '|']) faltan.push(d.nombre); }
+  const conObs = docs.filter(d => d.observacion).map(d => `${DOC_NOMBRE[d.tipo] || d.tipo}${d.parte ? ' (' + d.parte + ')' : ''}: ${d.observacion}`);
+  const sugerido = [...faltan.map(f => `Falta: ${f}; súbalo por el medio institucional indicando su folio.`), ...conObs];
+  const texto = prompt('Puntos de la prevención, uno por renglón (se numeran PRIMERO, SEGUNDO…). Se toman de lo que falta y de las observaciones que anotaste en cada documento. Puedes editar:', sugerido.join('\n'));
   if (!texto || !texto.trim()) return;
   const puntos = texto.split('\n').map(x => x.trim()).filter(Boolean);
   const notas = (s.notas || '').replace(/\[PREVENCION\][\s\S]*?\[\/PREVENCION\]\n?/, '') + `\n[PREVENCION]\n${puntos.join('\n')}\n[/PREVENCION]`;
-  const { error } = await sb.from('solicitudes_afiliacion').update({ fecha_prevencion: hoy(), notas: notas.trim() }).eq('id', s.id);
+  const { error } = await sb.from('solicitudes_afiliacion').update({ fecha_prevencion: hoy(), notas: notas.trim(), revisado_at: new Date().toISOString() }).eq('id', s.id);
   if (error) return toast('No se pudo registrar: ' + error.message, 'error');
-  await cargar(); toast('Prevención registrada. Envía el correo 2 y, si aplica, imprime el FT-002.', 'ok');
-  window.open(mailto(s.correo, correoPrevencion(s, puntos).asunto, correoPrevencion(s, puntos).cuerpo), '_blank');
+  await cargar(); toast('Prevención registrada. Ahora envíala con los botones WhatsApp o Correo (paso 2).', 'ok');
+  document.querySelector('.lateral .tarjeta:last-child')?.scrollIntoView({ behavior: 'smooth' });
 }
 async function favorable() {
   const req = [];
   if (!s.documentos_completos) req.push('el expediente no está completo');
+  if (docs.some(d => d.validado === false)) req.push('hay documentos con observación sin corregir');
   if (s.es_confianza) req.push('la persona declaró funciones de confianza');
   if (s.duplicado) req.push('hay un posible duplicado');
   if (!s.acepta_estatuto) req.push('no aceptó los Estatutos');
   if (req.length && !confirm(`Atención: ${req.join('; ')}. ¿Dictaminar FAVORABLE de todos modos?`)) return;
-  if (!confirm(`Dictaminar FAVORABLE la solicitud ${s.folio} de ${s.nombre_completo} y remitirla al Secretario General. ¿Confirmas?`)) return;
-  const { error } = await sb.from('solicitudes_afiliacion').update({ fecha_dictamen: hoy(), sentido: 'Favorable', fecha_envio_sg: hoy() }).eq('id', s.id);
+  if (!confirm(`Dictaminar FAVORABLE la solicitud ${s.folio} de ${s.nombre_completo} y remitirla al Secretario General para que autorice el alta. ¿Confirmas?`)) return;
+  const { error } = await sb.from('solicitudes_afiliacion').update({ fecha_dictamen: hoy(), sentido: 'Favorable', fecha_envio_sg: hoy(), revisado_at: new Date().toISOString() }).eq('id', s.id);
   if (error) return toast('No se pudo dictaminar: ' + error.message, 'error');
-  await cargar(); toast('Dictamen favorable registrado y enviado al SG. Se abre el correo al SG; después manda el correo 3 a la persona.', 'ok');
+  await cargar(); toast('Dictamen favorable registrado y enviado al SG (aparece en su bandeja). Se abre el correo al SG; avisa a la persona con el paso 3.', 'ok');
   window.open(mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo), '_blank');
 }
 async function desfavorable() {
-  const motivo = prompt('Requisito no acreditado y motivo (tal como irá en el dictamen y en el correo 4):'); if (!motivo) return;
+  const motivo = prompt('Requisito no acreditado y motivo (tal como irá en el dictamen y en el mensaje a la persona):'); if (!motivo) return;
   if (!confirm(`Dictaminar DESFAVORABLE ${s.folio}. ¿Confirmas?`)) return;
   const { error } = await sb.from('solicitudes_afiliacion').update({ fecha_dictamen: hoy(), sentido: 'Desfavorable', motivo_desfavorable: motivo }).eq('id', s.id);
   if (error) return toast('No se pudo dictaminar: ' + error.message, 'error');
-  await cargar(); toast('Dictamen desfavorable registrado. Envía el correo 4.', 'ok');
-  window.open(mailto(s.correo, correoDesfavorable(s).asunto, correoDesfavorable(s).cuerpo), '_blank');
+  await cargar(); toast('Dictamen desfavorable registrado. Envíalo con el paso 4.', 'ok');
 }
 async function alta() {
-  if (!confirm(`Ejecutar el alta de ${s.nombre_completo} en el Padrón de Afiliados, con adscripción a la ${s.seccion}. Se asigna número de afiliación y se generan la Constancia de Registro, el gafete y la carta de Finanzas. ¿Confirmas?`)) return;
+  if (!confirm(`Ejecutar el alta de ${s.nombre_completo} en el Padrón de Afiliados. ¿Confirmas?`)) return;
   const copia = {};
   for (const k of ['tipo_movimiento','nombre_completo','curp','rfc','fecha_nacimiento','estado_civil','genero','domicilio','colonia','cp','municipio','estado_domicilio','correo','telefono','nss','unidad_medica','unidad_medica_ciudad','escolaridad','escolaridad_estado','carrera','puesto','domicilio_fiscal','frecuencia_pago','telefono_empresa','jefe_laboral','seguro_aseguradora','seguro_poliza','seguro_vigencia','conyuge_nombre','conyuge_domicilio','conyuge_telefono','dependientes','identificacion_tipo','patron','actividad_transporte','ciudad_firma','centro_trabajo','empresa','fecha_inicio_relacion','fecha_dictamen','fecha_autorizacion_sg','autorizacion_sg_ref','expediente_url']) copia[k] = s[k];
   const { data, error } = await sb.from('padron').insert({ ...copia, folio: s.folio, solicitud_id: s.id, seccion_id: s.seccion_id, fecha_alta: hoy() }).select('id, numero_afiliacion').single();
   if (error) return toast('No se pudo dar el alta: ' + error.message, 'error');
-  await cargar(); toast(`Alta ejecutada. Número de afiliación ${data.numero_afiliacion}. Imprime la Constancia, el gafete y la carta de Finanzas, y envía el correo de alta.`, 'ok');
-  window.open(`${ROOT}documento.html?tipo=constancia&id=${data.id}`, '_blank');
+  await cargar(); toast(`Alta ejecutada. Número de afiliación ${data.numero_afiliacion}.`, 'ok');
 }
 </script>
 </body>

@@ -16,7 +16,8 @@
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, param, armazon, perfil, DOCS, DOCS_TRANSPORTE, docsRequeridos, DOC_NOMBRE, ESTADOS_MX, fecha, fechaLarga, fechaHoraLarga, hoy, subirArchivo, validarArchivo, rutaDocumento, ROOT, CFG } from '../assets/app.js';
+import { sb, $, $$, esc, toast, ocupado, param, armazon, perfil, DOCS, DOCS_TRANSPORTE, docsRequeridos, DOC_NOMBRE, DOC_CORTO, ESTADOS_MX, fecha, fechaLarga, fechaHoraLarga, hoy, subirArchivo, validarArchivo, rutaDocumento, ROOT, CFG } from '../assets/app.js';
+import { tarjetaDoc, activarTarjetas } from '../assets/docs-ui.js';
 
 const vista = $('#vista');
 const campo = (id, label, extra = '', tipo = 'text', req = true) => `<div class="campo"><label for="${id}">${label}${req ? ' *' : ''}</label><input type="${tipo}" id="${id}" ${req ? 'required' : ''} ${extra}></div>`;
@@ -43,10 +44,10 @@ function render(sec, modo, p) {
   const enConstitucion = !!sec.asamblea_fecha_hora;
   vista.innerHTML = `
   <p class="muted small" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">${esc(sec.denominacion)}${sec.numero ? ' · Sección ' + sec.numero : ''}</p>
-  <h1>${modo === 'seccion' ? 'Registrar una solicitud recibida en la Sección' : 'Solicitud de afiliación'}</h1>
+  <h1>${modo === 'seccion' ? 'Registrar una solicitud recibida en la Sección' : 'Registro para afiliarte por primera vez al SITAD'}</h1>
   <p class="entrada muted">${modo === 'seccion'
     ? `Estás registrando a nombre de la Sección (${esc(p.nombre || p.email)}). Captura los datos tal como vienen en la cédula y la solicitud firmadas, y sube los documentos que recibiste.`
-    : 'Son los datos de la Cédula de afiliación (Anexo 23) y de la Manifestación de afiliación (Anexo 12 y 13). Con ellos el sistema te entrega los dos formatos prellenados para que los firmes. Todos los campos son obligatorios, salvo los que no apliquen a tu caso.'}</p>
+    : 'Llena tus datos y sube tus documentos desde tu celular (archivo o foto). Al terminar recibes tu folio de seguimiento y tus formatos listos para firmar. Tardas unos 15 minutos. Todos los campos son obligatorios, salvo los que no apliquen a tu caso.'}</p>
   ${enConstitucion ? `<div class="aviso small"><b>Sección en constitución.</b> Con tu registro quedas inscrito(a) para participar en la <b>Asamblea Constitutiva</b> del ${esc(fechaHoraLarga(sec.asamblea_fecha_hora))}${sec.asamblea_direccion ? ', en ' + esc(sec.asamblea_direccion) : ''}.</div>` : ''}
 
   <form id="forma" class="tarjeta mt-2" novalidate>
@@ -131,18 +132,19 @@ function render(sec, modo, p) {
       </div>
     </fieldset>
 
+
     <fieldset>
       <legend>Documentos del expediente</legend>
-      <p class="small muted">Los dos primeros (solicitud y cédula) <b>te los entrega el sistema prellenados al enviar</b>: los imprimes, los firmas de puño y letra y los subes en "Consultar mi trámite". Los demás puedes subirlos ahora. PDF, JPG o PNG, máximo 5 MB cada uno.</p>
-      <div id="docs-base">${DOCS.filter(d => !['solicitud', 'cedula'].includes(d.tipo)).map(d => `<div class="campo"><label for="f_${d.tipo}">${esc(d.nombre)}</label><input type="file" id="f_${d.tipo}" accept="application/pdf,image/jpeg,image/png"><span class="ayuda">${esc(d.ayuda || '')}</span></div>`).join('')}</div>
-      <div id="docs-transporte" class="oculto">${DOCS_TRANSPORTE.map(d => `<div class="campo"><label for="f_${d.tipo}">${esc(d.nombre)}</label><input type="file" id="f_${d.tipo}" accept="application/pdf,image/jpeg,image/png"></div>`).join('')}</div>
-      ${modo === 'seccion' ? `<div id="docs-firmados"><p class="small"><b>Si ya recibiste los formatos firmados</b>, súbelos aquí:</p>${DOCS.filter(d => ['solicitud', 'cedula'].includes(d.tipo)).map(d => `<div class="campo"><label for="f_${d.tipo}">${esc(d.nombre)}</label><input type="file" id="f_${d.tipo}" accept="application/pdf,image/jpeg,image/png"></div>`).join('')}</div>` : ''}
+      <p class="small">Sube cada documento como <b>archivo</b> (PDF, JPG o PNG) o <b>tómale foto</b> con la cámara de tu celular. Máximo 5 MB por archivo. En cada documento abre "Cómo debe venir" para ver las instrucciones.</p>
+      <div class="aviso small"><b>Los dos formatos para firmar</b> (solicitud y cédula) te los entrega el sistema <b>al enviar</b>, ya llenos con tus datos: los imprimes, los firmas con tinta azul y los subes en el siguiente paso.${modo === 'seccion' ? ' Si ya los recibiste firmados, súbelos aquí abajo.' : ''}</div>
+      <div id="docs-base">${DOCS.filter(d => modo === 'seccion' || !d.generado).map(d => tarjetaDoc(d)).join('')}</div>
+      <div id="docs-transporte" class="oculto"><p class="small"><b>Por ser transporte de pasajeros o última milla, también:</b></p>${DOCS_TRANSPORTE.map(d => tarjetaDoc(d)).join('')}</div>
     </fieldset>
 
     <div id="errores" class="aviso error oculto"></div>
     <div class="acciones">
       <button class="btn" type="submit" id="enviar">${modo === 'seccion' ? 'Registrar solicitud' : 'Enviar mi solicitud'}</button>
-      <span class="small muted">Al enviar se genera tu folio y tus formatos para firma.</span>
+      <span class="small muted">Al enviar recibes tu folio de seguimiento y tus formatos para firma.</span>
     </div>
   </form>`;
 
@@ -151,6 +153,7 @@ function render(sec, modo, p) {
   $$('input[name=transporte]').forEach(r => r.onchange = () => $('#docs-transporte').classList.toggle('oculto', r.value !== 'si' || !r.checked));
   $('#sin_conyuge').onchange = e => { $('#bloque-conyuge').classList.toggle('oculto', e.target.checked); };
   $('#sin_dependientes').onchange = e => { $('#bloque-dep').classList.toggle('oculto', e.target.checked); };
+  window.__archivos = activarTarjetas($('#forma'));
   $('#forma').onsubmit = e => { e.preventDefault(); enviar(sec, modo, p); };
 }
 
@@ -173,8 +176,7 @@ async function enviar(sec, modo, p) {
   if (!$('#sin_dependientes').checked) { for (const i of [1, 2, 3]) { const n = v(`dep${i}_nombre`); if (n) dependientes.push({ nombre: n, parentesco: v(`dep${i}_par`), edad: v(`dep${i}_edad`) ? Number(v(`dep${i}_edad`)) : null }); } if (!dependientes.length) errores.push('Escribe al menos un dependiente o marca "No tengo dependientes".'); }
   if (!$('#acepta').checked) errores.push('Es necesario aceptar los Estatutos y Documentos Básicos.');
   if (!$('#aviso').checked) errores.push('Es necesario aceptar el Aviso de Privacidad.');
-  const archivos = [];
-  for (const d of [...DOCS, ...(transporte ? DOCS_TRANSPORTE : [])]) { const inp = $('#f_' + d.tipo); const f = inp && inp.files[0]; if (f) { const err = validarArchivo(f); if (err) errores.push(`${d.corto}: ${err}`); else archivos.push({ tipo: d.tipo, f }); } }
+  const archivos = window.__archivos().filter(a => transporte || !DOCS_TRANSPORTE.some(d => d.tipo === a.tipo));
   const caja = $('#errores');
   if (errores.length) { caja.classList.remove('oculto'); caja.innerHTML = '<b>Revisa lo siguiente:</b><ul>' + errores.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>'; caja.scrollIntoView({ behavior: 'smooth' }); return; }
   caja.classList.add('oculto');
@@ -190,7 +192,6 @@ async function enviar(sec, modo, p) {
     dependientes, identificacion_tipo: v('identificacion_tipo'), patron: v('patron'), actividad_transporte: transporte, es_confianza: radio('confianza') === 'si', ciudad_firma: v('ciudad_firma'),
     acepta_estatuto: true, acepta_aviso: true,
   };
-  const btn = $('#enviar'); ocupado(btn, true, 'Enviando…');
   let folio, idSol;
   try {
     if (modo === 'seccion') {
@@ -206,26 +207,29 @@ async function enviar(sec, modo, p) {
   const subidos = [], fallidos = [];
   for (const a of archivos) {
     try {
-      const ruta = rutaDocumento(sec.slug, folio, a.tipo, a.f.name); await subirArchivo(ruta, a.f);
-      if (modo === 'seccion') { const { error } = await sb.from('solicitud_documentos').insert({ solicitud_id: idSol, tipo: a.tipo, archivo_url: ruta, nombre_archivo: a.f.name }); if (error) throw error; }
-      else { const { error } = await sb.rpc('registrar_documento_publico', { p_folio: folio, p_correo: correo, p_tipo: a.tipo, p_archivo_url: ruta, p_nombre_archivo: a.f.name }); if (error) throw error; }
-      subidos.push(a.tipo);
-    } catch (err) { fallidos.push(a.tipo + ': ' + (err.message || err)); }
+      const ruta = rutaDocumento(sec.slug, folio, a.tipo + (a.parte ? '-' + a.parte : ''), a.f.name); await subirArchivo(ruta, a.f);
+      if (modo === 'seccion') { const { error } = await sb.from('solicitud_documentos').insert({ solicitud_id: idSol, tipo: a.tipo, parte: a.parte, archivo_url: ruta, nombre_archivo: a.f.name }); if (error) throw error; }
+      else { const { error } = await sb.rpc('registrar_documento_publico', { p_folio: folio, p_correo: correo, p_tipo: a.tipo, p_archivo_url: ruta, p_nombre_archivo: a.f.name, p_parte: a.parte }); if (error) throw error; }
+      subidos.push(a.tipo + (a.parte ? '|' + a.parte : ''));
+    } catch (err) { fallidos.push((DOC_CORTO[a.tipo] || a.tipo) + ': ' + (err.message || err)); }
   }
-  const req = docsRequeridos(transporte); const faltan = req.filter(d => !subidos.includes(d.tipo));
+  const req = docsRequeridos(transporte);
+  const completo = d => d.partes ? d.partes.every(([pt]) => subidos.includes(d.tipo + '|' + pt)) : subidos.includes(d.tipo);
+  const faltan = req.filter(d => !completo(d));
   const q = `f=${encodeURIComponent(folio)}&c=${encodeURIComponent(correo)}`;
   vista.innerHTML = `
     <div class="tarjeta">
       <p class="muted small" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--verde)">Solicitud recibida</p>
-      <h1>Tu folio es <span class="rojo">${esc(folio)}</span></h1>
-      <p>${modo === 'seccion' ? 'La solicitud quedó registrada a nombre de la Sección.' : `Guárdalo. Con él y tu correo (<b>${esc(correo)}</b>) consultas tu trámite y subes tus documentos.`} Fecha de recepción: <b>${fechaLarga(hoy())}</b>.</p>
-      <div class="aviso"><b>Siguiente paso: firma tus dos formatos.</b> Descárgalos ya prellenados con tus datos, imprímelos, fírmalos de puño y letra (la solicitud lleva dos firmas: manifestación y aviso de privacidad) y súbelos en "Consultar mi trámite".
-        <div class="acciones"><a class="btn" href="${ROOT}documento.html?tipo=solicitud&${q}" target="_blank">Solicitud de afiliación (Anexo 12 y 13)</a><a class="btn" href="${ROOT}documento.html?tipo=cedula&${q}" target="_blank">Cédula de afiliación (Anexo 23)</a></div></div>
-      ${subidos.length ? `<div class="aviso ok"><b>Documentos recibidos (${subidos.length} de ${req.length}):</b> ${subidos.map(t => esc(DOC_NOMBRE[t])).join(' · ')}</div>` : ''}
-      ${faltan.length ? `<div class="aviso atencion"><b>Faltan ${faltan.length} documento(s):</b> ${faltan.map(d => esc(d.corto)).join(' · ')}.<br>Súbelos en <a href="${ROOT}estado/?${q}">Consultar mi trámite</a>. Si no llegan, la Secretaría te los pedirá una sola vez.</div>` : ''}
+      <h1>Muchas gracias. Tu folio de seguimiento es <span class="rojo">${esc(folio)}</span></h1>
+      <p>${modo === 'seccion' ? 'La solicitud quedó registrada a nombre de la Sección.' : 'Tu solicitud va a ser verificada por la Secretaría de Organización. <b>Mantente atento(a) a tu celular y a tu correo</b> (<b>' + esc(correo) + '</b>): por ahí te avisamos cada paso.'} Fecha de recepción: <b>${fechaLarga(hoy())}</b>. Guarda tu folio: con él y tu nombre consultas tu trámite en cualquier momento.</p>
+      <div class="aviso"><b>Siguiente paso: firma tus dos formatos.</b> Ya vienen llenos con tus datos.
+        <ol class="small" style="margin:.5rem 0 .5rem 1.1rem;padding:0"><li>Descárgalos e imprímelos.</li><li>Fírmalos <b>con tinta azul</b>, igual que la firma de tu INE. La solicitud lleva <b>dos firmas</b>: al final de la manifestación y al final del aviso de privacidad. La cédula lleva una.</li><li>Tómales foto o escanéalos y súbelos en "Consultar mi trámite" con tu folio y tu nombre.</li></ol>
+        <div class="acciones"><a class="btn" href="${ROOT}documento.html?tipo=solicitud&${q}" target="_blank">Descargar solicitud (Anexo 12 y 13)</a><a class="btn" href="${ROOT}documento.html?tipo=cedula&${q}" target="_blank">Descargar cédula (Anexo 23)</a></div></div>
+      ${subidos.length ? `<div class="aviso ok"><b>Documentos recibidos:</b> ${subidos.map(t => esc((DOC_CORTO[t.split('|')[0]] || t) + (t.includes('|') ? ' (' + t.split('|')[1] + ')' : ''))).join(' · ')}</div>` : ''}
+      ${faltan.length ? `<div class="aviso atencion"><b>Todavía faltan ${faltan.length} documento(s):</b> ${faltan.map(d => esc(d.corto)).join(' · ')}.<br>Súbelos en <a href="${ROOT}estado/?${q}">Consultar mi trámite</a>. Si no llegan, la Secretaría te los pedirá una sola vez.</div>` : ''}
       ${fallidos.length ? `<div class="aviso error"><b>No se pudieron subir:</b> ${fallidos.map(esc).join('<br>')}. Inténtalo de nuevo desde Consultar mi trámite.</div>` : ''}
       <div class="acciones">
-        <a class="btn secundario" href="${ROOT}estado/?${q}">Ver mi trámite y subir documentos</a>
+        <a class="btn secundario" href="${ROOT}estado/?${q}">Ir a Consultar mi trámite y subir mis firmas</a>
         <button class="btn secundario" onclick="window.print()">Imprimir este acuse</button>
         ${modo === 'seccion' ? `<a class="btn secundario" href="${ROOT}seccion/">Volver al portal de la Sección</a>` : ''}
       </div>

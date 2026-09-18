@@ -16,18 +16,37 @@
     <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Comité Ejecutivo Nacional</p><h1>Secretaría de Finanzas · Cuotas</h1></div>
     <div id="resumen" class="small muted"></div>
   </div>
-  <div class="pestanas" id="pestanas"><button data-p="pendientes" class="activa">Por verificar</button><button data-p="historial">Padrón financiero</button><button data-p="nuevo">Registrar pago recibido por correo</button></div>
+  <div class="pestanas" id="pestanas"><button data-p="cobranza" class="activa">Afiliados y cobranza</button><button data-p="pendientes">Pagos por verificar</button><button data-p="historial">Padrón financiero</button><button data-p="nuevo">Registrar pago recibido por correo</button></div>
   <section id="panel"><p class="cargando">Cargando…</p></section>
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, armazon, requerirRol, fecha, fechaLarga, hoy, dinero, urlFirmada, subirArchivo, validarArchivo, mailto, ROOT, CFG } from '../assets/app.js';
+import { sb, $, $$, esc, toast, ocupado, armazon, requerirRol, fecha, fechaLarga, hoy, dinero, urlFirmada, subirArchivo, validarArchivo, mailto, whatsapp, correoFinanzas, ROOT, CFG } from '../assets/app.js';
 const p = await requerirRol(['finanzas', 'cen_organizacion', 'cen_lectura', 'sg']); if (!p) throw new Error('sin acceso');
 await armazon({ titulo: 'Secretaría de Finanzas', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }, { href: ROOT + 'finanzas/', texto: 'Finanzas', id: 'finanzas' }], activa: 'finanzas' });
 const puede = ['finanzas', 'cen_organizacion'].includes(p.rol); const panel = $('#panel');
-const P = { pendientes, historial, nuevo };
+const { data: cfgRows } = await sb.from('configuracion').select('clave, valor'); const cfg = Object.fromEntries((cfgRows || []).map(x => [x.clave, x.valor]));
+const P = { cobranza, pendientes, historial, nuevo };
 $$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); P[b.dataset.p](); });
-pendientes();
+cobranza();
+
+async function cobranza() {
+  panel.innerHTML = '<p class="cargando">Cargando afiliados…</p>';
+  const { data, error } = await sb.from('v_cobranza').select('*').eq('estatus', 'Activo').order('fecha_alta', { ascending: false });
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  const sinPago = data.filter(x => !x.pagos_verificados);
+  $('#resumen').textContent = `${data.length} afiliados activos · ${sinPago.length} sin ningún pago verificado`;
+  panel.innerHTML = `<p class="small muted">Cada alta autorizada por el Secretario General aparece aquí. Envía la <b>carta de Finanzas (AF-09)</b> por WhatsApp o correo con un clic: lleva la cuenta oficial, el monto, el concepto y la liga para registrar el pago.</p>
+    <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem"><select id="c-filtro"><option value="sin">Sin pago verificado</option><option value="todos">Todos los activos</option></select><input type="text" id="c-texto" placeholder="Buscar por nombre, número o sección" style="max-width:300px"></div>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Persona</th><th>Sección</th><th>Alta</th><th>Último pago verificado</th><th>Enviar carta AF-09</th></tr></thead><tbody id="c-filas"></tbody></table></div>`;
+  const pintar = () => {
+    const t = $('#c-texto').value.toLowerCase(); const base = $('#c-filtro').value === 'sin' ? sinPago : data;
+    const l = base.filter(x => !t || [x.nombre_completo, x.numero_afiliacion, x.seccion].join(' ').toLowerCase().includes(t));
+    $('#c-filas').innerHTML = l.length ? l.map(x => { const c = correoFinanzas(x, cfg); return `<tr><td class="num">${x.numero_afiliacion}</td><td><b>${esc(x.nombre_completo)}</b><br><span class="tiny muted">📱 ${esc(x.telefono || '—')} · ${esc(x.correo || '')}</span></td><td>${esc(x.seccion)}</td><td>${fecha(x.fecha_alta)}</td><td>${x.ultimo_pago ? fecha(x.ultimo_pago) + '<br><span class="tiny muted">' + esc(x.ultimo_periodo || '') + ' · ' + x.pagos_verificados + ' pago(s)</span>' : '<span class="etiqueta amarillo">sin pago</span>'}${x.pagos_por_verificar ? `<br><span class="tiny" style="color:var(--ambar)">${x.pagos_por_verificar} por verificar</span>` : ''}</td>
+      <td><a class="btn wa chico" href="${whatsapp(x.telefono, c.cuerpo)}" target="_blank" ${!x.telefono ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(x.correo, c.asunto, c.cuerpo)}">Correo</a> <a class="btn discreto chico" href="${ROOT}documento.html?tipo=finanzas&id=${x.id}" target="_blank">Carta PDF</a></td></tr>`; }).join('') : '<tr><td colspan="6" class="vacio">Sin afiliados en este filtro.</td></tr>';
+  };
+  $('#c-filtro').onchange = pintar; $('#c-texto').oninput = pintar; pintar();
+}
 
 const fila = (x, acciones) => `<tr><td>${fecha(x.fecha_operacion)}</td><td><b>${esc(x.nombre)}</b><br><span class="tiny muted">${x.numero_afiliacion ? 'No. ' + x.numero_afiliacion : (x.curp ? 'CURP ' + esc(x.curp) : '')}${x.folio_solicitud ? ' · ' + esc(x.folio_solicitud) : ''}${x.afiliado_nombre ? ' · ' + esc(x.seccion || '') : ' · <span style="color:var(--ambar)">sin ligar al padrón</span>'}</span></td><td>${esc(x.periodo)}</td><td class="num">${dinero(x.monto)}</td><td><span class="etiqueta ${x.estado === 'Verificado' ? 'verde' : x.estado === 'Rechazado' ? 'rojo' : 'amarillo'}">${esc(x.estado)}</span>${x.comprobante_folio ? `<br><span class="tiny muted">${esc(x.comprobante_folio)}</span>` : ''}${x.observacion ? `<br><span class="tiny" style="color:var(--ambar)">${esc(x.observacion)}</span>` : ''}</td><td class="small">${x.comprobante_url ? `<a href="#" data-ver="${x.id}">Comprobante bancario</a>` : '—'}${x.estado === 'Verificado' ? ` · <a href="${ROOT}documento.html?tipo=comprobante&id=${x.id}" target="_blank">Comprobante de cuota</a>` : ''}${acciones ? ' · ' + acciones : ''}</td></tr>`;
 async function lista(filtroEstado) {
