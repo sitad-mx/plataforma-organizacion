@@ -16,7 +16,7 @@
     <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Secretaría de Organización de la Sección</p><h1 id="titulo">Sección</h1></div>
     <div id="liga" class="small"></div>
   </div>
-  <div class="pestanas" id="pestanas"><button data-p="solicitudes" class="activa">Solicitudes</button><button data-p="padron">Padrón adscrito</button><button data-p="directorio">Directorio</button><button data-p="guia">Cómo se hace</button><button onclick="location.href='../manual-seccion/'">📘 Manual de la Sección</button></div>
+  <div class="pestanas" id="pestanas"><button data-p="solicitudes" class="activa">Solicitudes</button><button data-p="padron">Padrón adscrito</button><button data-p="asambleas">Asambleas</button><button data-p="directorio">Directorio</button><button data-p="guia">Cómo se hace</button><button onclick="location.href='../manual-seccion/'">📘 Manual de la Sección</button></div>
   <section id="panel"><p class="cargando">Cargando…</p></section>
 </main>
 <footer id="pie"></footer>
@@ -29,9 +29,9 @@ $('#titulo').textContent = sec ? sec.denominacion : 'Sección';
 const liga = sec ? `${ROOT}afiliate/?s=${sec.slug}` : '';
 $('#liga').innerHTML = liga ? `<b>Liga de afiliación de tu Sección:</b><br><code>${liga}</code> <button class="btn discreto chico" id="copiar">Copiar</button>` : '<span class="muted">Tu Sección aún no tiene liga activa.</span>';
 const c = $('#copiar'); if (c) c.onclick = () => navigator.clipboard.writeText(liga).then(() => toast('Liga copiada. Compártela a los trabajadores de tu Sección.', 'ok'));
-const P = { solicitudes, padron, directorio, guia };
-$$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); P[b.dataset.p](); });
-solicitudes();
+const P = { solicitudes, padron, asambleas, directorio, guia };
+$$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); history.replaceState(null, '', '?p=' + b.dataset.p); P[b.dataset.p](); });
+const inicialP = new URLSearchParams(location.search).get('p'); if (inicialP && P[inicialP] && inicialP !== 'solicitudes') { $$('#pestanas button').forEach(x => x.classList.toggle('activa', x.dataset.p === inicialP)); P[inicialP](); } else solicitudes();
 
 async function solicitudes() {
   panel.innerHTML = '<p class="cargando">Cargando…</p>';
@@ -67,6 +67,20 @@ async function directorio() {
     <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Cargo</th><th>Persona</th><th>Estatus</th><th>Periodo</th><th>Teléfono</th><th>Correo</th>${esOrg ? '<th></th>' : ''}</tr></thead><tbody>${data.map(c => `<tr data-id="${c.id}"><td>${esc(c.cargo)}</td><td>${esc(c.persona_nombre || '—')}</td><td><span class="etiqueta ${c.estatus === 'Vigente' ? 'verde' : ''}">${esc(c.estatus)}</span>${c.contacto_validado === false ? '<br><span class="tiny" style="color:var(--ambar)">contacto pendiente de validar</span>' : ''}</td><td class="small">${c.periodo_inicio ? fecha(c.periodo_inicio) + ' – ' + fecha(c.periodo_fin) : '—'}</td><td>${esOrg ? `<input type="text" value="${esc(c.telefono || '')}" data-tel style="min-width:120px">` : esc(c.telefono || '')}</td><td>${esOrg ? `<input type="text" value="${esc(c.correo || '')}" data-correo style="min-width:180px">` : esc(c.correo || '')}</td>${esOrg ? '<td><button class="btn secundario chico" data-guardar>Guardar</button></td>' : ''}</tr>`).join('')}</tbody></table></div>`;
   const og = $('#o-guardar'); if (og) og.onclick = async () => { const { error } = await sb.rpc('actualizar_oficina_seccion', { p_seccion: p.seccion_id, p_domicilio: $('#o-dom').value, p_horario: $('#o-hor').value, p_nombre: $('#o-nom').value, p_telefono: $('#o-tel').value }); if (error) toast(error.message, 'error'); else toast('Oficina de atención guardada. Ya aparece en las cartas de aceptación.', 'ok'); };
   $$('[data-guardar]').forEach(b => b.onclick = async () => { const tr = b.closest('tr'); const { error } = await sb.from('cargos_seccionales').update({ telefono: tr.querySelector('[data-tel]').value || null, correo: tr.querySelector('[data-correo]').value || null, fecha_actualizacion: new Date().toISOString().slice(0, 10) }).eq('id', tr.dataset.id); if (error) toast(error.message, 'error'); else { toast('Contacto actualizado; queda pendiente de validar por el CEN.', 'ok'); directorio(); } });
+}
+
+// ===== Asambleas (Módulo 3) =====
+const ETIQ_AS = { 'En preparación': '', Convocada: 'azul', Instalada: 'verde', Concluida: 'carbon', 'Sin quórum': 'rojo', Cancelada: 'carbon' };
+function filaAsamblea(x) {
+  return `<tr class="clic" data-as="${x.id}"><td>${fecha(x.fecha)}<br><span class="tiny muted">${String(x.hora).slice(0, 5)} h</span></td><td><b>${esc(x.tipo)}</b>${x.incluye_eleccion ? ' <span class="tiny muted">· con elección</span>' : ''}<br><span class="tiny muted">${esc(x.lugar || '')}</span></td><td><span class="etiqueta ${ETIQ_AS[x.estado] || ''}">${esc(x.estado)}</span></td><td class="small">${x.corte_congelado_at ? `<b>${x.total_con_derecho}</b> al corte · quórum ${x.quorum_requerido}` : `corte ${fecha(x.corte_fecha)} · ${x.con_derecho_hoy} hoy`}</td><td class="small">${x.estado === 'Instalada' || x.estado === 'Concluida' || x.estado === 'Sin quórum' ? `${x.presentes} presentes` : (x.fecha_expedicion ? (x.anticipacion_cumple ? '<span class="etiqueta verde">anticipación ok</span>' : '<span class="etiqueta rojo">anticipación corta</span>') : '<span class="tiny muted">sin fecha de expedición</span>')}</td></tr>`;
+}
+async function asambleas() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>';
+  const { data, error } = await sb.from('v_asambleas').select('*').order('fecha', { ascending: false });
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  panel.innerHTML = `<div class="acciones" style="margin:0 0 1rem">${esOrg ? `<a class="btn" href="${ROOT}asambleas/">Convocar una asamblea</a>` : ''}<span class="small muted">Ordinarias en abril y octubre; extraordinarias cuando hay un plazo o un riesgo. La plataforma fija el corte del padrón tres días antes, verifica la anticipación de la convocatoria, registra la asistencia con el gafete (QR) o por nombre y calcula el quórum.</span></div>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Fecha</th><th>Asamblea</th><th>Estado</th><th>Padrón al corte</th><th>Asistencia</th></tr></thead><tbody>${data.length ? data.map(filaAsamblea).join('') : '<tr><td colspan="5" class="vacio">Tu Sección no tiene asambleas registradas.</td></tr>'}</tbody></table></div>`;
+  $$('#panel tr.clic').forEach(tr => tr.onclick = () => location.href = `${ROOT}asambleas/?id=${tr.dataset.as}`);
 }
 function guia() {
   panel.innerHTML = `<div class="tarjeta" style="max-width:820px">

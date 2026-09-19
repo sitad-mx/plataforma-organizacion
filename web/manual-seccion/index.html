@@ -41,7 +41,7 @@
 <div class="manual" id="manual">
   <div class="membrete"><img src="../assets/sitad-logo-full.png" alt="SITAD"><div><b>Sindicato de Trabajadores Digitales de REEDCAM (SITAD)</b><span>Secretaría de Organización · Comité Ejecutivo Nacional</span><span class="lema">Por un futuro digital, al servicio de México</span></div></div>
   <h1>Manual de la Sección · Plataforma de Organización</h1>
-  <p class="small muted">Cómo revisar y preautorizar las solicitudes de afiliación de tu Sección. Versión 1.1 · 18 de septiembre de 2026 (agrega la entrega en oficina). Este manual se actualiza cada vez que cambia la plataforma; la versión vigente siempre está en <span id="liga-manual"></span>.</p>
+  <p class="small muted">Cómo revisar y preautorizar las solicitudes de afiliación de tu Sección. Versión 1.2 · 19 de septiembre de 2026 (agrega las asambleas). Este manual se actualiza cada vez que cambia la plataforma; la versión vigente siempre está en <span id="liga-manual"></span>.</p>
 
   <h2>1. Tu papel en cinco líneas</h2>
   <ul>
@@ -120,9 +120,20 @@
   </ol>
   <div class="regla">Nunca envíes la credencial ni el número de afiliado por WhatsApp, correo o foto. Se entregan únicamente en persona. Si registraste una entrega por error, avisa al CEN: solo él puede anularla.</div>
 
-  <h2>9. Dudas</h2>
+  <h2>9. Las asambleas de tu Sección: convocar, corte, registro y quórum</h2>
+  <p>En la pestaña <b>Asambleas</b> de tu portal llevas las asambleas Ordinarias (abril y octubre) y Extraordinarias. La Constitutiva la convoca Organización del CEN, pero la mesa de registro y el quórum los operas igual.</p>
+  <ol>
+    <li><b>Convocar.</b> Pulsa <span class="boton rojo">Convocar una asamblea</span> y captura lo que dice la convocatoria: tipo, fecha, hora, lugar, modalidad, fecha del acuerdo del Comité, fecha de expedición y el orden del día (hay uno tipo para cada caso; cada punto lleva su carácter: informativo, deliberativo o resolutivo). La plataforma te dice el <b>corte del padrón</b> (tres días antes) y si la <b>anticipación</b> alcanza: diez días hábiles la Ordinaria, cinco la Extraordinaria, diez si hay elección. Descarga la convocatoria prellenada (AS-01), fírmala con tu Secretario General Seccional, publícala y levanta la constancia (AS-03).</li>
+    <li><b>Congelar el padrón al corte.</b> Desde tres días antes (o antes, para preparar la lista), pulsa <span class="boton">Congelar el padrón al corte</span>: quedan las personas activas con alta hasta esa fecha. Después nadie se agrega ni se quita; solo el CEN puede rehacerlo hasta el día del corte. Imprime la <b>lista del corte</b>.</li>
+    <li><b>Mesa de registro el día de la asamblea</b> (desde una hora antes, con el celular): en <b>Registro de asistencia</b> escribe el nombre, folio o número y pulsa <span class="boton">Registrar</span>, o usa <span class="boton">📷 Escanear QR del gafete</span> con la cámara. Pide siempre identificación oficial. <b>Quien está en el corte y se identifica se registra y vota aunque no traiga el gafete</b>: marca "No" en "Trae gafete" y queda anotado. Quien no está en el corte entra como <b>observador</b>, sin voz ni voto.</li>
+    <li><b>Quórum.</b> La tarjeta de la derecha cuenta en vivo: con derecho a voto al corte, quórum requerido (mitad más uno) y presentes. A la hora convocada pulsa <span class="boton verde">Informar quórum e instalar</span>, imprime el <b>cómputo (AS-06)</b> y entrégalo al Secretario General Seccional, que declara instalada la asamblea. Si no alcanza, pulsa "Registrar que no hay quórum": no se instala ni se acuerda nada y el Comité acuerda una nueva convocatoria. Quien llegue después sigue pudiendo registrarse.</li>
+    <li><b>Durante las votaciones.</b> Antes de cada punto resolutivo escribe el punto y pulsa <span class="boton">Verificar quórum ahora</span>; si no se conserva, la Mesa no somete resoluciones. Al terminar, <span class="boton rojo">Concluir asamblea</span> e imprime la <b>lista de asistencia (AS-05)</b> con las horas y los observadores para que se firme y se suba a la carpeta 04-Asambleas junto con el cómputo y la copia del acta.</li>
+  </ol>
+  <div class="regla">El derecho a votar lo da el padrón al corte; el gafete solo lo acredita. Nunca niegues el voto a quien está en el corte y se identifica por no traer una impresión.</div>
+
+  <h2>10. Dudas</h2>
   <p>Secretaría de Organización del CEN: <b>sitadorganizacion@gmail.com</b>. Escribe siempre con el folio de la persona.</p>
-  <div class="pie-doc">Manual de la Sección · Plataforma de Organización SITAD · v1.1 (18 de septiembre de 2026) · Secretaría de Organización del Comité Ejecutivo Nacional. Este documento orienta. En caso de duda o diferencia prevalecen la Ley Federal del Trabajo, el Estatuto y las resoluciones válidamente emitidas por los órganos competentes. C. Antonio Ancona No. 1, Interior 3, Col. Cuajimalpa, C.P. 05000, Alcaldía Cuajimalpa de Morelos, Ciudad de México.</div>
+  <div class="pie-doc">Manual de la Sección · Plataforma de Organización SITAD · v1.2 (19 de septiembre de 2026) · Secretaría de Organización del Comité Ejecutivo Nacional. Este documento orienta. En caso de duda o diferencia prevalecen la Ley Federal del Trabajo, el Estatuto y las resoluciones válidamente emitidas por los órganos competentes. C. Antonio Ancona No. 1, Interior 3, Col. Cuajimalpa, C.P. 05000, Alcaldía Cuajimalpa de Morelos, Ciudad de México.</div>
 </div>
 <footer id="pie"></footer>
 <script type="module">
@@ -133,7 +144,7 @@ $('#descargar').onclick = async () => {
   const btn = $('#descargar'); btn.disabled = true; btn.textContent = 'Preparando PDF…';
   try {
     if (!window.html2pdf) await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
-    await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: 'Manual de la Seccion - Plataforma SITAD v1.1.pdf', image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'letter' }, pagebreak: { mode: ['css', 'legacy'], before: '.salto' } }).from($('#manual')).save();
+    await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: 'Manual de la Seccion - Plataforma SITAD v1.2.pdf', image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'letter' }, pagebreak: { mode: ['css', 'legacy'], before: '.salto' } }).from($('#manual')).save();
   } catch (e) { toast('No se pudo generar el PDF; usa Imprimir y elige "Guardar como PDF".', 'error'); }
   btn.disabled = false; btn.textContent = '⬇ Descargar PDF';
 };

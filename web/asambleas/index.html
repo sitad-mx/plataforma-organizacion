@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asamblea · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+<style>
+  .quorum { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .6rem; text-align: center; }
+  .quorum div { background: var(--fondo); border-radius: var(--radio); padding: .6rem .4rem; }
+  .quorum b { display: block; font-size: 1.8rem; line-height: 1.1; color: var(--carbon); }
+  .quorum span { font-size: .78rem; color: var(--apoyo); }
+  .quorum .si b { color: var(--verde); } .quorum .no b { color: var(--rojo); }
+  #video { width: 100%; max-width: 420px; border-radius: var(--radio); background: #000; display: block; }
+  .res-busqueda li { display: flex; gap: .6rem; align-items: center; justify-content: space-between; padding: .45rem 0; border-bottom: 1px solid var(--linea-suave); }
+  .res-busqueda li.ya { opacity: .55; }
+  .orden textarea { min-height: 150px; font-family: inherit; }
+  .dos-col { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1rem; align-items: start; }
+  .dos-col > div { min-width: 0; }
+  @media (max-width: 860px) { .dos-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido">
+  <p class="small"><a id="volver" href="#">← Volver</a></p>
+  <div id="vista"><p class="cargando">Cargando…</p></div>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, hoy, ROOT, CFG } from '../assets/app.js';
+const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas', 'seccion_organizacion', 'seccion_sg']); if (!p) throw new Error('sin acceso');
+const esSeccion = ['seccion_organizacion', 'seccion_sg'].includes(p.rol);
+await armazon(esSeccion ? { titulo: p.secciones ? p.secciones.denominacion : 'Sección' } : { titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
+$('#volver').href = esSeccion ? ROOT + 'seccion/?p=asambleas' : ROOT + 'cen/?p=asambleas';
+const esOrg = p.rol === 'cen_organizacion'; const opera = esOrg || esSeccion; const edita = esOrg || p.rol === 'seccion_organizacion';
+const vista = $('#vista'); const id = param('id');
+const TIPOS = ['Constitutiva', 'Ordinaria', 'Extraordinaria']; const CARACTERES = ['Informativo', 'Deliberativo', 'Resolutivo'];
+const ETIQ = { 'En preparación': '', Convocada: 'azul', Instalada: 'verde', Concluida: 'carbon', 'Sin quórum': 'rojo', Cancelada: 'carbon' };
+const ORDEN_TIPO = {
+  Ordinaria: [['Registro de asistencia y verificación del quórum', 'Informativo'], ['Declaratoria de instalación por el Secretario General Seccional', 'Informativo'], ['Elección de la Mesa de Debates (Presidencia, Secretaría y dos Escrutadores)', 'Resolutivo'], ['Lectura y, en su caso, aprobación del orden del día', 'Resolutivo'], ['Informe semestral de actividades del Comité Ejecutivo Seccional', 'Resolutivo'], ['Cuenta detallada de los recursos administrados por la Sección', 'Resolutivo'], ['Informe de la Comisión Seccional de Vigilancia', 'Informativo'], ['Propuestas y acuerdos para remitir al Comité Ejecutivo Nacional', 'Resolutivo'], ['Lectura y firma del acta', 'Resolutivo'], ['Clausura', 'Informativo']],
+  Extraordinaria: [['Registro de asistencia y verificación del quórum', 'Informativo'], ['Declaratoria de instalación por el Secretario General Seccional', 'Informativo'], ['Elección de la Mesa de Debates (Presidencia, Secretaría y dos Escrutadores)', 'Resolutivo'], ['Lectura y, en su caso, aprobación del orden del día', 'Resolutivo'], ['(Asunto que motiva la Extraordinaria)', 'Resolutivo'], ['Lectura y firma del acta', 'Resolutivo'], ['Clausura', 'Informativo']],
+  Constitutiva: [['Registro de asistencia y verificación del quórum', 'Informativo'], ['Declaratoria de instalación', 'Informativo'], ['Elección de la Mesa de Debates', 'Resolutivo'], ['Lectura del acuerdo del Comité Ejecutivo Nacional que crea la Sección', 'Informativo'], ['Conocimiento y protesta de los Documentos Básicos', 'Informativo'], ['Designación de la Comisión Electoral', 'Resolutivo'], ['Registro de planillas y elección del Comité Ejecutivo Seccional y de la Comisión Seccional de Vigilancia', 'Resolutivo'], ['Toma de protesta', 'Informativo'], ['Lectura y firma del acta · Clausura', 'Resolutivo']],
+};
+let a = null, padron = [], asis = [], verifs = [], q = null, secciones = [];
+
+if (!id) { await nueva(); } else { await cargar(); }
+
+// ===================== Nueva asamblea =====================
+async function nueva() {
+  if (!edita) { vista.innerHTML = '<div class="aviso error">Solo la Secretaría de Organización de la Sección u Organización del CEN convocan asambleas.</div>'; return; }
+  if (esOrg) { const { data } = await sb.from('secciones').select('id, denominacion').order('denominacion'); secciones = data || []; }
+  const secId = esOrg ? (param('seccion') || '') : p.seccion_id;
+  vista.innerHTML = `<h1>Nueva asamblea</h1><p class="muted">Captura lo que dice la convocatoria. La plataforma calcula el corte del padrón (tres días antes) y te avisa si la anticipación no alcanza.</p>
+    <form id="f" class="tarjeta">
+      ${esOrg ? `<div class="campo"><label>Sección</label><select id="c-sec" required><option value="">Elige…</option>${secciones.map(s => `<option value="${s.id}" ${s.id === secId ? 'selected' : ''}>${esc(s.denominacion)}</option>`).join('')}</select></div>` : ''}
+      ${formulario({ tipo: esSeccion ? 'Ordinaria' : 'Constitutiva', hora: '10:00', hora_registro: '09:00', modalidad: 'Presencial', incluye_eleccion: !esSeccion, orden_del_dia: [] })}
+      <div class="acciones"><button class="btn" type="submit">Crear asamblea</button></div></form>`;
+  activarFormulario();
+  $('#f').onsubmit = async e => { e.preventDefault(); const d = leerFormulario(); d.seccion_id = esOrg ? $('#c-sec').value : p.seccion_id; if (!d.seccion_id) return toast('Elige la Sección.', 'error');
+    const { data, error } = await sb.from('asambleas').insert(d).select('id').single(); if (error) return toast(error.message, 'error'); location.href = `?id=${data.id}`; };
+}
+function formulario(x) {
+  const orden = (x.orden_del_dia || []).map(o => `${o.asunto} | ${o.caracter}`).join('\n');
+  return `<div class="fila">
+      <div class="campo"><label>Tipo de asamblea</label><select id="c-tipo">${TIPOS.map(t => `<option ${x.tipo === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="campo"><label>Fecha</label><input type="date" id="c-fecha" value="${x.fecha || ''}" required></div>
+      <div class="campo"><label>Hora de inicio</label><input type="time" id="c-hora" value="${(x.hora || '10:00').slice(0, 5)}" required></div>
+      <div class="campo"><label>Registro desde</label><input type="time" id="c-hreg" value="${(x.hora_registro || '').slice(0, 5)}"><span class="ayuda">Normalmente una hora antes.</span></div>
+    </div>
+    <div class="fila">
+      <div class="campo"><label>Lugar</label><input type="text" id="c-lugar" value="${esc(x.lugar || '')}" placeholder="Domicilio del local o sede"></div>
+      <div class="campo"><label>Modalidad</label><select id="c-mod">${['Presencial', 'Híbrida', 'Remota'].map(m => `<option ${x.modalidad === m ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+      <div class="campo"><label>Si es híbrida o remota: plataforma, acceso, registro y contingencia</label><input type="text" id="c-medio" value="${esc(x.medio_remoto || '')}"></div>
+    </div>
+    <div class="fila">
+      <div class="campo"><label>Fecha del acuerdo del Comité Ejecutivo Seccional</label><input type="date" id="c-acuerdo" value="${x.fecha_acuerdo_comite || ''}"><span class="ayuda">No aplica en la Constitutiva (la convoca el CEN).</span></div>
+      <div class="campo"><label>Fecha de expedición de la convocatoria</label><input type="date" id="c-exp" value="${x.fecha_expedicion || ''}"><span class="ayuda" id="ayuda-antic">Se publica el mismo día.</span></div>
+      <div class="campo"><label class="casilla"><input type="checkbox" id="c-elec" ${x.incluye_eleccion ? 'checked' : ''}> El orden del día incluye una elección</label><span class="ayuda">Entonces manda la regla electoral: diez días y padrón publicado tres días antes.</span></div>
+    </div>
+    <div class="campo orden"><label>Orden del día <span class="tiny muted">(un punto por renglón: asunto | Informativo, Deliberativo o Resolutivo)</span> <button type="button" class="btn discreto chico" id="c-orden-tipo">Cargar orden del día tipo</button></label><textarea id="c-orden">${esc(orden)}</textarea></div>
+    <div class="campo"><label>Notas internas</label><input type="text" id="c-notas" value="${esc(x.notas || '')}"></div>
+    <div id="antic" class="small"></div>`;
+}
+function activarFormulario() {
+  const calc = () => { const t = $('#c-tipo').value, f = $('#c-fecha').value, e = $('#c-exp').value, el = $('#c-elec').checked; const req = (t === 'Extraordinaria' && !el) ? 5 : 10;
+    if (!f) { $('#antic').innerHTML = ''; return; }
+    const corte = new Date(f + 'T12:00:00'); corte.setDate(corte.getDate() - 3);
+    const cs = `${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`;
+    let html = `<div class="aviso small">Corte del padrón con derecho a voto: <b>${fechaLarga(cs)}</b> (tres días antes). Anticipación requerida: <b>${req} días hábiles</b> entre la expedición y la asamblea.`;
+    if (e) { const h = habilesEntre(e, f); html += h >= req ? ` <span style="color:var(--verde)">Hay ${h} días hábiles: cumple.</span>` : ` <b style="color:var(--rojo)">Solo hay ${h} días hábiles: no cumple.</b>`; }
+    $('#antic').innerHTML = html + '</div>'; };
+  ['c-tipo', 'c-fecha', 'c-exp', 'c-elec'].forEach(i => $('#' + i).onchange = calc); calc();
+  $('#c-orden-tipo').onclick = () => { $('#c-orden').value = ORDEN_TIPO[$('#c-tipo').value].map(x => x.join(' | ')).join('\n'); };
+}
+function habilesEntre(a, b) { let d = new Date(a + 'T12:00:00'), fin = new Date(b + 'T12:00:00'), k = 0; while (d < fin) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) k++; } return k; } // aproximación en pantalla (sin festivos); la base los descuenta
+function leerFormulario() {
+  const orden = $('#c-orden').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => { const [asunto, car] = l.split('|').map(s => (s || '').trim()); const c = CARACTERES.find(x => x.toLowerCase().startsWith((car || '').toLowerCase().slice(0, 3))) || 'Informativo'; return { asunto, caracter: c }; });
+  return { tipo: $('#c-tipo').value, fecha: $('#c-fecha').value, hora: $('#c-hora').value, hora_registro: $('#c-hreg').value || null, lugar: $('#c-lugar').value || null, modalidad: $('#c-mod').value, medio_remoto: $('#c-medio').value || null, fecha_acuerdo_comite: $('#c-acuerdo').value || null, fecha_expedicion: $('#c-exp').value || null, incluye_eleccion: $('#c-elec').checked, orden_del_dia: orden, notas: $('#c-notas').value || null };
+}
+
+// ===================== Ficha =====================
+async function cargar() {
+  const [r1, r2, r3, r4, r5] = await Promise.all([
+    sb.from('v_asambleas').select('*').eq('id', id).single(),
+    sb.from('asamblea_padron').select('*').eq('asamblea_id', id).order('nombre_completo'),
+    sb.from('asistencias').select('*').eq('asamblea_id', id).order('checkin_at'),
+    sb.from('asamblea_verificaciones').select('*').eq('asamblea_id', id).order('verificado_at'),
+    sb.rpc('computo_quorum', { p_asamblea: id }),
+  ]);
+  if (r1.error || !r1.data) { vista.innerHTML = '<div class="aviso error">No se encontró la asamblea.</div>'; return; }
+  a = r1.data; padron = r2.data || []; asis = r3.data || []; verifs = r4.data || []; q = r5.data && r5.data[0] ? r5.data[0] : null;
+  render();
+}
+function render() {
+  const congelado = !!a.corte_congelado_at; const abiertaRegistro = congelado && ['Convocada', 'En preparación', 'Instalada'].includes(a.estado);
+  const editable = edita && ['En preparación', 'Convocada'].includes(a.estado);
+  const registrados = new Set(asis.filter(s => s.afiliado_id).map(s => s.afiliado_id));
+  const qd = `id=${a.id}`;
+  vista.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
+      <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">${esc(a.seccion)}</p>
+        <h1>Asamblea Seccional ${esc(a.tipo)} <span class="etiqueta ${ETIQ[a.estado] || ''}">${esc(a.estado)}</span></h1>
+        <p class="muted mb-0">${fechaLarga(a.fecha)} · ${String(a.hora).slice(0, 5)} h${a.hora_registro ? ' (registro desde las ' + String(a.hora_registro).slice(0, 5) + ')' : ''} · ${esc(a.lugar || 'lugar por definir')} · ${esc(a.modalidad)}</p></div>
+      <div class="acciones" style="margin:0">
+        <a class="btn secundario chico" href="${ROOT}documento.html?tipo=convocatoria&${qd}" target="_blank">Convocatoria (AS-01)</a>
+        <a class="btn secundario chico" href="${ROOT}documento.html?tipo=lista_corte&${qd}" target="_blank" ${congelado ? '' : 'style="opacity:.5;pointer-events:none"'}>Lista del corte</a>
+        <a class="btn secundario chico" href="${ROOT}documento.html?tipo=asistencia&${qd}" target="_blank" ${congelado ? '' : 'style="opacity:.5;pointer-events:none"'}>Lista de asistencia (AS-05)</a>
+        <a class="btn secundario chico" href="${ROOT}documento.html?tipo=quorum&${qd}" target="_blank" ${congelado ? '' : 'style="opacity:.5;pointer-events:none"'}>Cómputo de quórum (AS-06)</a>
+      </div>
+    </div>
+    ${a.fecha_expedicion && !a.anticipacion_cumple ? `<div class="aviso error"><b>La convocatoria no cumple la anticipación:</b> hay ${a.anticipacion_habiles} días hábiles entre la expedición (${fecha(a.fecha_expedicion)}) y la asamblea; se requieren ${a.anticipacion_requerida}.</div>` : ''}
+    ${!a.fecha_expedicion && a.estado !== 'Concluida' ? `<div class="aviso atencion small">Falta la fecha de expedición de la convocatoria; con ella se verifica la anticipación (${a.anticipacion_requerida} días hábiles).</div>` : ''}
+
+    <div class="dos-col mt-2">
+      <div>
+        <div class="tarjeta">
+          <h3>Padrón al corte <span class="tiny muted">(derecho a voto)</span></h3>
+          <p class="small">Corte: <b>${fechaLarga(a.corte_fecha)}</b> (tres días antes). ${congelado ? `Congelado el ${fechaLarga(String(a.corte_congelado_at).slice(0, 10))}: <b>${a.total_con_derecho} personas</b> con derecho a voto; quórum requerido <b>${a.quorum_requerido}</b> (mitad más uno).` : `Hoy tendrían derecho a voto <b>${a.con_derecho_hoy}</b> personas (altas hasta el corte). El padrón se congela ${a.corte_vencido ? 'ya' : 'a partir del ' + fechaLarga(a.corte_fecha)}; después no se agrega ni se quita a nadie.`}</p>
+          ${opera && (!congelado || esOrg) && ['En preparación', 'Convocada'].includes(a.estado) ? `<div class="acciones" style="margin:0 0 .6rem"><button class="btn ${congelado ? 'secundario' : ''}" id="b-congelar">${congelado ? 'Volver a congelar (CEN)' : 'Congelar el padrón al corte'}</button>${!a.corte_vencido && !congelado ? '<span class="small muted">Puedes congelarlo antes para preparar la lista; el CEN puede rehacerlo hasta el día del corte.</span>' : ''}</div>` : ''}
+          ${congelado ? `<div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Persona</th><th>Folio</th><th>Asistencia</th></tr></thead><tbody>${padron.map(x => `<tr><td class="num">${x.numero_afiliacion ?? '—'}</td><td>${esc(x.nombre_completo)}</td><td class="small">${esc(x.folio || '')}</td><td>${registrados.has(x.afiliado_id) ? '<span class="etiqueta verde">Presente</span>' : '<span class="tiny muted">—</span>'}</td></tr>`).join('') || '<tr><td colspan="4" class="vacio">Nadie con alta a la fecha del corte.</td></tr>'}</tbody></table></div>` : ''}
+        </div>
+
+        ${abiertaRegistro && opera ? `<div class="tarjeta">
+          <h3>Registro de asistencia</h3>
+          <p class="small muted">Identificación oficial vigente en mano. Quien está en el padrón al corte se registra y vota aunque no traiga el gafete; quien no está entra como observador, sin voz ni voto.</p>
+          <div class="acciones" style="margin:0 0 .6rem"><input type="text" id="buscar" placeholder="Nombre, folio o número de afiliación" style="max-width:340px" autocomplete="off"><button class="btn secundario chico" id="b-qr">📷 Escanear QR del gafete</button></div>
+          <div id="escaner" class="oculto mb-2"><video id="video" playsinline muted></video><p class="tiny muted">Apunta al código del gafete o de la credencial. <a href="#" id="b-qr-cerrar">Cerrar cámara</a></p></div>
+          <div class="fila small"><div class="campo"><label>Identificación</label><select id="r-ident"><option>INE</option><option>Otra</option></select></div><div class="campo"><label>Trae gafete</label><select id="r-gafete"><option value="si">Sí</option><option value="no">No (se anota)</option></select></div><div class="campo"><label>Modalidad</label><select id="r-mod"><option value="P">Presencial</option><option value="R">Remota</option></select></div></div>
+          <ul class="res-busqueda" id="resultados" style="list-style:none;padding:0;margin:0"></ul>
+          <details class="mt-2"><summary class="small"><b>Registrar observador</b> (no está en el corte, invitado, autoridad sindical)</summary><div class="fila mt-1"><div class="campo"><label>Nombre</label><input type="text" id="o-nombre"></div><div class="campo"><label>Motivo</label><input type="text" id="o-motivo" placeholder="No está en el corte / invitado / autoridad"></div></div><button class="btn secundario chico" id="b-obs">Registrar observador</button></details>
+        </div>` : ''}
+
+        <div class="tarjeta">
+          <h3>Asistencia registrada <span class="tiny muted">(${asis.filter(s => s.con_derecho).length} con derecho a voto · ${asis.filter(s => !s.con_derecho).length} observadores)</span></h3>
+          <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Hora</th><th>Persona</th><th>Cómo</th><th>Identificación</th><th>Gafete</th><th>Incidencia</th>${abiertaRegistro && opera ? '<th></th>' : ''}</tr></thead><tbody>${asis.length ? asis.map(s => `<tr class="${s.con_derecho ? '' : 'muted'}"><td class="small">${new Date(s.checkin_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })}</td><td>${esc(s.nombre)}${s.con_derecho ? '' : ' <span class="etiqueta">observador</span>'}${s.modalidad === 'R' ? ' <span class="etiqueta azul">remota</span>' : ''}</td><td class="small">${s.metodo === 'qr' ? 'QR' : s.metodo === 'busqueda' ? 'Búsqueda' : 'Manual'}</td><td class="small">${esc(s.identificacion || '—')}</td><td class="small">${s.con_derecho ? (s.gafete ? 'Sí' : 'No') : '—'}</td><td class="tiny">${esc(s.incidencia || s.motivo_observador || '')}</td>${abiertaRegistro && opera ? `<td><button class="btn discreto chico" data-quitar="${s.id}">Quitar</button></td>` : ''}</tr>`).join('') : `<tr><td colspan="7" class="vacio">Todavía nadie registrado.</td></tr>`}</tbody></table></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="tarjeta">
+          <h3>Quórum</h3>
+          ${q && q.quorum_requerido ? `<div class="quorum"><div><b>${q.total_con_derecho}</b><span>con derecho a voto al corte</span></div><div><b>${q.quorum_requerido}</b><span>quórum requerido</span></div><div class="${q.hay_quorum ? 'si' : 'no'}"><b>${q.presentes}</b><span>presentes con derecho${q.remotos ? ' (' + q.remotos + ' remotos)' : ''}</span></div><div><b>${q.observadores}</b><span>observadores</span></div></div>
+            <p class="mt-2 mb-0"><b class="${q.hay_quorum ? '' : 'rojo'}">${q.hay_quorum ? 'Hay quórum.' : 'No hay quórum todavía: faltan ' + (q.quorum_requerido - q.presentes) + '.'}</b></p>` : '<p class="small muted">Congela el padrón al corte para calcular el quórum.</p>'}
+          ${a.estado === 'Instalada' ? `<div class="aviso ok small mt-2"><b>Instalada</b> a las ${new Date(a.instalada_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })} con ${a.presentes_al_instalar} de ${a.total_con_derecho}. El Secretario General Seccional ya declaró instalada la asamblea.</div>` : ''}
+          ${a.estado === 'Sin quórum' ? `<div class="aviso error small mt-2"><b>Sin quórum</b> a la hora convocada: ${a.presentes_al_instalar} presentes de ${a.total_con_derecho} (requeridos ${a.quorum_requerido}). No se instala ni se acuerda nada; el Comité Ejecutivo Seccional acuerda una nueva convocatoria. Avisa a la Secretaría de Organización del CEN.</div>` : ''}
+          ${a.estado === 'Concluida' ? `<div class="aviso small mt-2">Concluida el ${fechaLarga(String(a.concluida_at).slice(0, 10))}.${a.acta_url ? ` <a href="${esc(a.acta_url)}" target="_blank">Acta</a>` : ' Sube la copia del acta a la carpeta 04-Asambleas dentro de los diez días hábiles.'}</div>` : ''}
+          ${opera && congelado && ['Convocada', 'En preparación'].includes(a.estado) ? `<div class="acciones"><button class="btn ${q && q.hay_quorum ? 'verde' : 'secundario'}" id="b-instalar">${q && q.hay_quorum ? '✓ Informar quórum e instalar' : 'Registrar que no hay quórum'}</button></div><p class="tiny muted">A la hora convocada: cierra el registro, informa al Secretario General Seccional (AS-06) y, si hay quórum, él declara instalada la asamblea. Quien llegue después sigue pudiendo registrarse.</p>` : ''}
+          ${opera && a.estado === 'Instalada' ? `<div class="mt-2"><label class="small"><b>Antes de cada votación resolutiva:</b> confirma que se conserva el quórum</label><div class="acciones" style="margin:.3rem 0"><input type="text" id="v-punto" placeholder="Punto del orden del día" style="max-width:260px"><button class="btn secundario chico" id="b-verificar">Verificar quórum ahora</button></div></div>
+            <div class="acciones mt-2"><input type="url" id="c-acta" placeholder="Liga del acta (opcional)" style="max-width:260px"><button class="btn" id="b-concluir">Concluir asamblea</button></div>` : ''}
+          ${verifs.length ? `<h4 class="mt-2">Conservación del quórum</h4><ol class="linea-tiempo">${verifs.map(v => `<li class="hecho"><b>${esc(v.punto)}</b><span>${new Date(v.verificado_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })} · ${v.presentes} presentes · ${v.conserva ? 'se conserva' : '<b style="color:var(--rojo)">NO se conserva: la Mesa no somete resoluciones</b>'}</span></li>`).join('')}</ol>` : ''}
+        </div>
+
+        <div class="tarjeta">
+          <h3>Convocatoria</h3>
+          <dl class="datos"><dt>Anticipación</dt><dd>${a.fecha_expedicion ? `${a.anticipacion_habiles} días hábiles (requeridos ${a.anticipacion_requerida}) · ${a.anticipacion_cumple ? '<span class="etiqueta verde">cumple</span>' : '<span class="etiqueta rojo">no cumple</span>'}` : 'sin fecha de expedición'}</dd><dt>Acuerdo del Comité</dt><dd>${a.fecha_acuerdo_comite ? fechaLarga(a.fecha_acuerdo_comite) : '—'}</dd><dt>Expedida</dt><dd>${a.fecha_expedicion ? fechaLarga(a.fecha_expedicion) : '—'}</dd><dt>Elección</dt><dd>${a.incluye_eleccion ? 'Sí (rige el Paquete Electoral)' : 'No'}</dd></dl>
+          <p class="small"><b>Orden del día</b></p><ol class="small" style="margin:0 0 .6rem 1.1rem;padding:0">${(a.orden_del_dia || []).map(o => `<li>${esc(o.asunto)} <span class="tiny muted">· ${esc(o.caracter)}</span></li>`).join('') || '<li class="muted">Sin capturar</li>'}</ol>
+          ${a.notas ? `<p class="tiny muted">${esc(a.notas)}</p>` : ''}
+          ${editable ? `<details><summary class="small"><b>Editar datos de la convocatoria</b></summary><form id="f-editar" class="mt-1">${formulario(a)}<div class="acciones"><button class="btn" type="submit">Guardar</button>${a.estado === 'En preparación' ? '<button class="btn secundario" type="button" id="b-convocada">Marcar como convocada (publicada)</button>' : ''}<button class="btn discreto" type="button" id="b-cancelar">Cancelar asamblea</button></div></form></details>` : ''}
+        </div>
+      </div>
+    </div>`;
+  enlazar(abiertaRegistro, registrados);
+}
+
+function enlazar(abiertaRegistro, registrados) {
+  const on = (i, fn) => { const el = $('#' + i); if (el) el.onclick = fn; };
+  on('b-congelar', async () => { if (!confirm(`Congelar el padrón al corte del ${fechaLarga(a.corte_fecha)}: quedan las personas activas con alta hasta esa fecha. ¿Confirmas?`)) return; const { data, error } = await sb.rpc('congelar_padron_asamblea', { p_asamblea: a.id }); if (error) return toast(error.message, 'error'); toast(`Padrón congelado: ${data} personas con derecho a voto.`, 'ok'); cargar(); });
+  on('b-instalar', async () => { const hay = q && q.hay_quorum; if (!confirm(hay ? `Informar al Secretario General Seccional que hay quórum (${q.presentes} de ${q.total_con_derecho}) y registrar la instalación. ¿Confirmas?` : `Registrar que NO hay quórum (${q.presentes} de ${q.total_con_derecho}; requeridos ${q.quorum_requerido}). La asamblea no se instala. ¿Confirmas?`)) return; const { error } = await sb.rpc('instalar_asamblea', { p_asamblea: a.id }); if (error) return toast(error.message, 'error'); toast(hay ? 'Asamblea instalada.' : 'Registrado: sin quórum.', hay ? 'ok' : 'error'); cargar(); });
+  on('b-verificar', async () => { const punto = $('#v-punto').value.trim(); if (!punto) return toast('Escribe el punto del orden del día.', 'error'); const { data, error } = await sb.rpc('verificar_quorum', { p_asamblea: a.id, p_punto: punto }); if (error) return toast(error.message, 'error'); toast(data.conserva ? 'Se conserva el quórum.' : 'NO se conserva el quórum.', data.conserva ? 'ok' : 'error'); cargar(); });
+  on('b-concluir', async () => { if (!confirm('Concluir la asamblea. ¿Confirmas?')) return; const { error } = await sb.rpc('concluir_asamblea', { p_asamblea: a.id, p_acta_url: $('#c-acta').value || null }); if (error) return toast(error.message, 'error'); toast('Asamblea concluida.', 'ok'); cargar(); });
+  on('b-obs', async () => { const n = $('#o-nombre').value.trim(); if (!n) return toast('Escribe el nombre.', 'error'); const { error } = await sb.rpc('registrar_observador', { p_asamblea: a.id, p_nombre: n, p_motivo: $('#o-motivo').value || null }); if (error) return toast(error.message, 'error'); toast('Observador registrado.', 'ok'); cargar(); });
+  on('b-convocada', async () => { const { error } = await sb.from('asambleas').update({ estado: 'Convocada' }).eq('id', a.id); if (error) return toast(error.message, 'error'); cargar(); });
+  on('b-cancelar', async () => { if (!confirm('¿Cancelar esta asamblea?')) return; const { error } = await sb.from('asambleas').update({ estado: 'Cancelada' }).eq('id', a.id); if (error) return toast(error.message, 'error'); cargar(); });
+  $$('[data-quitar]').forEach(b => b.onclick = async () => { if (!confirm('¿Quitar este registro de asistencia?')) return; const { error } = await sb.rpc('quitar_asistencia', { p_asistencia: b.dataset.quitar }); if (error) return toast(error.message, 'error'); cargar(); });
+  const fe = $('#f-editar'); if (fe) { activarFormulario(); fe.onsubmit = async e => { e.preventDefault(); const { error } = await sb.from('asambleas').update(leerFormulario()).eq('id', a.id); if (error) return toast(error.message, 'error'); toast('Guardado.', 'ok'); cargar(); }; }
+  if (abiertaRegistro && opera) {
+    const buscar = $('#buscar'); const res = $('#resultados');
+    const pintar = () => { const t = buscar.value.trim().toLowerCase(); if (t.length < 2) { res.innerHTML = ''; return; }
+      const l = padron.filter(x => (x.nombre_completo + ' ' + (x.folio || '') + ' ' + (x.numero_afiliacion ?? '')).toLowerCase().includes(t)).slice(0, 8);
+      res.innerHTML = l.length ? l.map(x => `<li class="${registrados.has(x.afiliado_id) ? 'ya' : ''}"><span><b>${esc(x.nombre_completo)}</b> <span class="tiny muted">No. ${x.numero_afiliacion ?? '—'} · ${esc(x.folio || '')}</span></span>${registrados.has(x.afiliado_id) ? '<span class="etiqueta verde">ya registrada</span>' : `<button class="btn chico" data-reg="${x.afiliado_id}">Registrar</button>`}</li>`).join('') : '<li class="small muted">No está en el padrón al corte. Si se identifica como afiliada pero no aparece, no vota: regístrala como observadora y anota la incidencia.</li>';
+      $$('[data-reg]', res).forEach(b => b.onclick = () => registrar(b.dataset.reg, 'busqueda')); };
+    buscar.oninput = pintar; buscar.focus();
+    on('b-qr', () => abrirEscaner()); on('b-qr-cerrar', e => { e.preventDefault(); cerrarEscaner(); });
+  }
+}
+async function registrar(afiliadoId, metodo) {
+  const gaf = $('#r-gafete').value === 'si';
+  const { error } = await sb.rpc('registrar_asistencia', { p_asamblea: a.id, p_afiliado: afiliadoId, p_metodo: metodo, p_identificacion: $('#r-ident').value, p_gafete: gaf, p_modalidad: $('#r-mod').value, p_incidencia: null });
+  if (error) return toast(error.message, 'error');
+  toast('Registrada' + (gaf ? '.' : ' (sin gafete; queda anotado).'), 'ok');
+  const txt = $('#buscar').value; await cargar(); const b = $('#buscar'); if (b) { b.value = ''; b.focus(); }
+}
+// ===== Escáner QR (cámara del teléfono): BarcodeDetector nativo o jsQR =====
+let stream = null, escaneando = false;
+async function abrirEscaner() {
+  const caja = $('#escaner'); caja.classList.remove('oculto'); const video = $('#video');
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); video.srcObject = stream; await video.play(); }
+  catch (e) { toast('No se pudo abrir la cámara: ' + (e.message || e), 'error'); caja.classList.add('oculto'); return; }
+  escaneando = true; let detector = null, jsQR = null;
+  if ('BarcodeDetector' in window) { try { detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch { detector = null; } }
+  if (!detector) { try { jsQR = (await import('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/+esm')).default; } catch { toast('El navegador no puede leer códigos; usa la búsqueda por nombre.', 'error'); cerrarEscaner(); return; } }
+  const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d', { willReadFrequently: true }); let ultimo = '', ultimoAt = 0;
+  const tick = async () => {
+    if (!escaneando) return;
+    let texto = null;
+    try {
+      if (detector) { const codes = await detector.detect(video); if (codes.length) texto = codes[0].rawValue; }
+      else if (video.videoWidth) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; ctx.drawImage(video, 0, 0); const img = ctx.getImageData(0, 0, canvas.width, canvas.height); const r = jsQR(img.data, img.width, img.height); if (r) texto = r.data; }
+    } catch {}
+    if (texto && (texto !== ultimo || Date.now() - ultimoAt > 4000)) { ultimo = texto; ultimoAt = Date.now(); await leerCodigo(texto); }
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+function cerrarEscaner() { escaneando = false; if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } const c = $('#escaner'); if (c) c.classList.add('oculto'); }
+async function leerCodigo(texto) {
+  let token = texto.trim(); try { const u = new URL(texto); token = u.searchParams.get('t') || token; } catch {}
+  const { data, error } = await sb.rpc('registrar_asistencia_qr', { p_asamblea: a.id, p_token: token, p_identificacion: $('#r-ident').value });
+  if (error) { toast(error.message, 'error'); return; }
+  toast(`Registrada por QR: ${data.nombre}`, 'ok'); const seguir = escaneando; cerrarEscaner(); await cargar(); if (seguir) abrirEscaner(); // la cámara vuelve a abrirse para la siguiente persona
+}
+</script>
+</body>
+</html>

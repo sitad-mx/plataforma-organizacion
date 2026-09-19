@@ -12,8 +12,8 @@
 <body>
 <header id="cabecera"></header>
 <main class="contenido angosto">
-  <h1>Verificar una credencial</h1>
-  <p class="muted">Escanea el código QR de la credencial o escribe la clave de verificación que aparece al pie.</p>
+  <h1>Verificar un gafete o una credencial</h1>
+  <p class="muted">Escanea el código QR del gafete o de la credencial, o escribe la clave de verificación que aparece al pie.</p>
   <form id="forma" class="tarjeta">
     <div class="campo"><label for="t">Clave de verificación</label><input type="text" id="t" required placeholder="32 caracteres"></div>
     <div class="acciones"><button class="btn" type="submit">Verificar</button></div>
@@ -22,7 +22,7 @@
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, esc, param, armazon } from '../assets/app.js';
+import { sb, $, esc, param, armazon, CFG } from '../assets/app.js';
 await armazon({ titulo: 'Verificación de credencial' });
 const res = $('#resultado');
 if (param('t')) { $('#t').value = param('t'); verificar(); }
@@ -33,7 +33,7 @@ async function verificar() {
   if (error || !data || !data.length) { res.innerHTML = '<div class="aviso error"><b>Credencial no encontrada.</b> La clave no corresponde a ninguna credencial expedida por la Secretaría de Organización.</div>'; return; }
   const c = data[0];
   res.innerHTML = c.vigente
-    ? `<div class="aviso ok"><b>Credencial vigente.</b><br>Persona afiliada activa · ${esc(c.seccion)} · Número de afiliación ${esc(c.numero_afiliacion)}.<br><span class="small muted">Por protección de datos, esta verificación no muestra nombre ni otros datos personales.</span></div>`
+    ? `<div class="aviso ok"><b>Registro vigente.</b><br>Persona afiliada activa · ${esc(c.seccion)}.<br><span class="small muted">Por protección de datos, esta verificación no muestra nombre ni otros datos personales.</span></div><div class="tarjeta"><h3>Documentos Básicos del Sindicato</h3><p class="small">Declaración de Principios, Programa de Acción y Estatuto. Léelos con anticipación a la asamblea.</p><a class="btn" href="${CFG.LIGA_DOCUMENTOS_BASICOS}" target="_blank">Abrir los Documentos Básicos</a></div>`
     : `<div class="aviso atencion"><b>Credencial no vigente.</b><br>La persona ya no figura como afiliada activa (${esc(c.seccion)}).</div>`;
 }
 </script>

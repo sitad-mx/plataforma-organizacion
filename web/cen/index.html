@@ -20,6 +20,7 @@
     <button data-p="solicitudes" class="activa">Solicitudes</button>
     <button data-p="padron">Padrón</button>
     <button data-p="secciones">Secciones</button>
+    <button data-p="asambleas">Asambleas</button>
     <button data-p="tablero">Tablero</button>
     <button data-p="trimestre">Relación trimestral</button>
   </div>
@@ -31,7 +32,7 @@ import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fec
 const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas']); if (!p) throw new Error('sin acceso');
 await armazon({ titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
 const panel = $('#panel'); const esOrg = p.rol === 'cen_organizacion';
-const PANELES = { solicitudes, padron, secciones, tablero, trimestre };
+const PANELES = { solicitudes, padron, secciones, asambleas, tablero, trimestre };
 $$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); history.replaceState(null, '', '?p=' + b.dataset.p); PANELES[b.dataset.p](); });
 const inicial = param('p') && PANELES[param('p')] ? param('p') : 'solicitudes';
 $$('#pestanas button').forEach(b => b.classList.toggle('activa', b.dataset.p === inicial)); PANELES[inicial]();
@@ -140,6 +141,23 @@ async function secciones() {
     const tel = prompt('Teléfono de esa persona (10 dígitos):', s.oficina_contacto_telefono || ''); if (tel === null) return;
     const { error } = await sb.rpc('actualizar_oficina_seccion', { p_seccion: s.id, p_domicilio: dom, p_horario: hor, p_nombre: nom, p_telefono: tel }); if (error) toast(error.message, 'error'); else { toast('Oficina guardada.', 'ok'); secciones(); } });
   $$('[data-copiar]').forEach(b => b.onclick = () => navigator.clipboard.writeText(b.dataset.copiar).then(() => toast('Liga copiada.', 'ok')));
+}
+
+
+// ===== Asambleas (Módulo 3) =====
+const ETIQ_AS = { 'En preparación': '', Convocada: 'azul', Instalada: 'verde', Concluida: 'carbon', 'Sin quórum': 'rojo', Cancelada: 'carbon' };
+function filaAsamblea(x) {
+  return `<tr class="clic" data-as="${x.id}"><td>${fecha(x.fecha)}<br><span class="tiny muted">${String(x.hora).slice(0, 5)} h</span></td><td><b>${esc(x.tipo)}</b>${x.incluye_eleccion ? ' <span class="tiny muted">· con elección</span>' : ''}<br><span class="tiny muted">${esc(x.lugar || '')}</span></td><td>${esc(x.seccion)}</td><td><span class="etiqueta ${ETIQ_AS[x.estado] || ''}">${esc(x.estado)}</span></td><td class="small">${x.corte_congelado_at ? `<b>${x.total_con_derecho}</b> al corte · quórum ${x.quorum_requerido}` : `corte ${fecha(x.corte_fecha)} · ${x.con_derecho_hoy} hoy`}</td><td class="small">${x.estado === 'Instalada' || x.estado === 'Concluida' || x.estado === 'Sin quórum' ? `${x.presentes} presentes` : (x.fecha_expedicion ? (x.anticipacion_cumple ? '<span class="etiqueta verde">anticipación ok</span>' : '<span class="etiqueta rojo">anticipación corta</span>') : '<span class="tiny muted">sin fecha de expedición</span>')}</td></tr>`;
+}
+async function asambleas() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>';
+  const { data, error } = await sb.from('v_asambleas').select('*').order('fecha', { ascending: false });
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  const proximas = data.filter(x => x.fecha >= hoy() && !['Concluida', 'Cancelada'].includes(x.estado));
+  panel.innerHTML = `<div class="acciones" style="margin:0 0 1rem">${esOrg ? `<a class="btn" href="${ROOT}asambleas/">Convocar una asamblea</a>` : ''}<span class="small muted"><b>${proximas.length} próxima(s)</b> · ${data.length} en total. Las Secciones convocan sus ordinarias y extraordinarias; la Constitutiva la convoca Organización del CEN.</span></div>
+    ${proximas.filter(x => x.fecha_expedicion && !x.anticipacion_cumple).map(x => `<div class="aviso error small"><b>${esc(x.seccion)} · ${esc(x.tipo)} del ${fecha(x.fecha)}:</b> la convocatoria no cumple la anticipación (${x.anticipacion_habiles} de ${x.anticipacion_requerida} días hábiles).</div>`).join('')}
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Fecha</th><th>Asamblea</th><th>Sección</th><th>Estado</th><th>Padrón al corte</th><th>Asistencia</th></tr></thead><tbody>${data.length ? data.map(filaAsamblea).join('') : '<tr><td colspan="6" class="vacio">Sin asambleas registradas.</td></tr>'}</tbody></table></div>`;
+  $$('#panel tr.clic').forEach(tr => tr.onclick = () => location.href = `${ROOT}asambleas/?id=${tr.dataset.as}`);
 }
 
 // ===== Tablero =====

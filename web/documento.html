@@ -24,13 +24,13 @@ if (!publico) { p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 
 await armazon({ titulo: 'Documento' });
 
 // Descarga directa en PDF (html2pdf); si falla, queda Imprimir → Guardar como PDF
-const NOMBRES_PDF = { solicitud: 'Solicitud de afiliacion (Anexo 12 y 13)', cedula: 'Cedula de afiliacion (Anexo 23)', constancia: 'Constancia de Registro (Anexo 15)', gafete: 'Gafete (Anexo 14)', finanzas: 'Carta de Finanzas (AF-09)', dictamen: 'Dictamen FT-001', prevencion: 'Prevencion FT-002', credencial: 'Credencial', comprobante: 'Comprobante de cuota' };
+const NOMBRES_PDF = { solicitud: 'Solicitud de afiliacion (Anexo 12 y 13)', cedula: 'Cedula de afiliacion (Anexo 23)', constancia: 'Constancia de Registro (Anexo 15)', gafete: 'Gafete (Anexo 14)', finanzas: 'Carta de Finanzas (AF-09)', dictamen: 'Dictamen FT-001', prevencion: 'Prevencion FT-002', credencial: 'Credencial', comprobante: 'Comprobante de cuota', convocatoria: 'Convocatoria a Asamblea Seccional (AS-01)', lista_corte: 'Padron al corte', asistencia: 'Lista de asistencia (AS-05)', quorum: 'Computo de quorum (AS-06)' };
 $('#descargar').onclick = async () => {
   const btn = $('#descargar'); btn.disabled = true; btn.textContent = 'Preparando PDF…';
   try {
     if (!window.html2pdf) await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
     const nodo = doc.firstElementChild; const nombre = (NOMBRES_PDF[tipo] || 'Documento') + (f ? ' - ' + f : '') + '.pdf';
-    await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: nombre, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }, pagebreak: { mode: ['css', 'legacy'], before: '.salto' } }).from(nodo).save();
+    await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: nombre, image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'letter', orientation: nodo.classList.contains('apaisado') ? 'landscape' : 'portrait' }, pagebreak: { mode: ['css', 'legacy'], before: '.salto' } }).from(nodo).save();
   } catch (e) { toast('No se pudo generar el PDF; usa Imprimir y elige "Guardar como PDF". ' + (e.message || ''), 'error'); }
   btn.disabled = false; btn.textContent = '⬇ Descargar PDF';
 };
@@ -167,7 +167,7 @@ async function anexo14(x, cfg) {
     <div class="panel br"><div class="imprime">IMPRIME TU GAFETE CON ANTICIPACIÓN PARA INGRESAR DIRECTO AL ÁREA DEL EVENTO</div><ol class="pasos"><li>Imprime tu gafete en una hoja tamaño carta y dobla por la mitad dejando tu información en la cara externa.</li><li>Dobla nuevamente la hoja dejando una sola cara de frente.</li><li>Presenta este gafete en la entrada del salón del evento.</li></ol></div>
   </div>`;
   const { toCanvas } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm');
-  toCanvas($('#qr'), liga, { width: 160, margin: 0, color: { dark: '#171717' } });
+  toCanvas($('#qr'), `${ROOT}verificar/?t=${x.credencial_qr_token}`, { width: 160, margin: 0, color: { dark: '#171717' } }); // la página de verificación abre los Documentos Básicos y la mesa de registro lo lee para el check-in
 }
 
 // ===================== AF-09 · Carta de Finanzas =====================
@@ -248,6 +248,95 @@ function credencial(x) {
   return urlVerif;
 }
 
+// ===================== Módulo 3 · Asamblea (AS-01, lista del corte, AS-05, AS-06) =====================
+const CAR = { Informativo: 'Informativo', Deliberativo: 'Deliberativo', Resolutivo: 'Resolutivo' };
+const secLabel = a => (a.seccion_numero ? `Sección ${a.seccion_numero} «${v(a.seccion).replace(/^Sección\s+/i, '')}»` : v(a.seccion));
+const horaCorta = h => String(h || '').slice(0, 5);
+function convocatoriaAS01(a) {
+  const constitutiva = a.tipo === 'Constitutiva';
+  return `<div class="documento">${membreteFT(constitutiva ? 'Convocatoria a Asamblea Seccional Constitutiva' : 'Convocatoria a Asamblea Seccional')}
+    <p><b>${CFG.SINDICATO}</b> · ${secLabel(a)}</p>
+    <h2>Convocatoria</h2>
+    <p>${constitutiva ? `Con fundamento en el acuerdo del Comité Ejecutivo Nacional por el que se aprueba la creación de la ${secLabel(a)}, la Secretaría de Organización del Comité Ejecutivo Nacional convoca a las personas afiliadas adscritas a su circunscripción, en pleno goce de sus derechos sindicales, a la` : `El Comité Ejecutivo Seccional de la ${secLabel(a)}${a.fecha_acuerdo_comite ? ', en sesión de fecha ' + fecha(a.fecha_acuerdo_comite) + ',' : ''} acordó convocar a las personas afiliadas adscritas a esta Sección en pleno goce de sus derechos sindicales a la`}</p>
+    <p style="text-align:center;font-size:13pt"><b>ASAMBLEA SECCIONAL ${v(a.tipo).toUpperCase()}</b></p>
+    <p>que se celebrará conforme a lo siguiente:</p>
+    <table><tr><th style="width:38%">Elemento</th><th>Dato</th></tr>
+      <tr><td>Fecha</td><td>${fechaLarga(a.fecha)}</td></tr>
+      <tr><td>Hora de inicio</td><td>${horaCorta(a.hora)} horas${a.hora_registro ? ' (registro de asistencia desde las ' + horaCorta(a.hora_registro) + ')' : ''}</td></tr>
+      <tr><td>Lugar</td><td>${v(a.lugar)}</td></tr>
+      <tr><td>Modalidad</td><td>${v(a.modalidad)}</td></tr>
+      ${a.modalidad !== 'Presencial' ? `<tr><td>Plataforma o medio institucional, acceso e identificación, registro de asistencia y contingencia</td><td>${v(a.medio_remoto)}</td></tr>` : ''}
+      <tr><td>Corte del registro de afiliados adscritos con derecho a voto</td><td>${fechaLarga(a.corte_fecha)} (tres días antes de la asamblea; la lista puede consultarse en la Secretaría de Organización de la Sección)</td></tr></table>
+    <h2>Orden del día</h2>
+    <table><tr><th style="width:6%">№</th><th>Asunto</th><th style="width:22%">Carácter</th></tr>${(a.orden_del_dia || []).map((o, i) => `<tr><td>${i + 1}</td><td>${v(o.asunto)}</td><td>${v(CAR[o.caracter] || o.caracter)}</td></tr>`).join('')}</table>
+    <h2>Indicaciones para las personas afiliadas</h2>
+    <ul><li>Presentar identificación oficial vigente y, de ser posible, el gafete o la credencial sindical. Quien aparece en el registro al corte y se identifica participa aunque no traiga el gafete. Llegar una hora antes del inicio.</li>
+      <li>Sólo participan con voz y voto las personas afiliadas adscritas a la Sección con derecho a voto al corte indicado. Quien no aparezca en el registro podrá asistir como observador sin voz ni voto.</li>
+      <li>La asamblea sólo conocerá y resolverá los asuntos de este orden del día.</li>${a.incluye_eleccion ? '<li>La elección se conduce por la Comisión Electoral mediante voto personal, libre, directo y secreto.</li>' : ''}</ul>
+    <p><b>Fecha de expedición:</b> ${a.fecha_expedicion ? fechaLarga(a.fecha_expedicion) : '____ de ______________ de ________'}.</p>
+    <div class="firmas"><div>${constitutiva ? 'Titular de la Secretaría de Organización del Comité Ejecutivo Nacional' : 'Nombre y firma · Secretario General del Comité Ejecutivo Seccional'}</div></div>
+    <p class="small"><i>Esta convocatoria se publica en el local sindical y en los lugares de mayor afluencia de las personas afiliadas en los centros de trabajo comprendidos en la Sección, con al menos diez días hábiles de anticipación (cinco si es Extraordinaria). Se conserva constancia de la fecha y lugares de publicación (AS-03).</i></p>
+    ${pieFT('Formato AS-01 (prellenado por la plataforma)')}</div>`;
+}
+function listaCorte(a, pad) {
+  return `<div class="documento">${membreteFT('Padrón al corte · personas con derecho a voto')}
+    <p><b>${secLabel(a)}</b> · Asamblea Seccional ${v(a.tipo)} del ${fechaLarga(a.fecha)} · <b>Corte:</b> ${fechaLarga(a.corte_fecha)}${a.corte_congelado_at ? ' (congelado el ' + fechaLarga(String(a.corte_congelado_at).slice(0, 10)) + ')' : ' <b>(sin congelar: lista preliminar)</b>'}</p>
+    <p><b>Total con derecho a voto:</b> ${pad.length} · <b>Quórum requerido (mitad más uno):</b> ${Math.floor(pad.length / 2) + 1}</p>
+    <table><tr><th style="width:6%">№</th><th>Nombre completo</th><th style="width:14%">No. afiliación</th><th style="width:20%">Folio</th></tr>${pad.map((x, i) => `<tr><td>${i + 1}</td><td>${v(x.nombre_completo)}</td><td>${x.numero_afiliacion ?? ''}</td><td>${v(x.folio)}</td></tr>`).join('') || '<tr><td colspan="4">Nadie con alta a la fecha del corte.</td></tr>'}</table>
+    <p class="small"><i>Este padrón no se modifica el día de la asamblea, ni para agregar ni para quitar. El derecho a votar lo da este registro; el gafete lo acredita.</i></p>
+    ${pieFT('Padrón al corte (Módulo 3)')}</div>`;
+}
+function listaAsistenciaAS05(a, pad, asis) {
+  const reg = new Map(asis.filter(s => s.afiliado_id).map(s => [s.afiliado_id, s]));
+  const hora = ts => ts ? new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' }) : '';
+  const obs = asis.filter(s => !s.con_derecho);
+  return `<div class="documento apaisado">${membreteFT('Lista de asistencia · Asamblea Seccional')}
+    <p><b>${secLabel(a)}</b> · Asamblea ${v(a.tipo)} · <b>Fecha:</b> ${fechaLarga(a.fecha)} · <b>Lugar:</b> ${v(a.lugar)}</p>
+    <p><b>Corte del registro de afiliados adscritos con derecho a voto:</b> ${fechaLarga(a.corte_fecha)} · <b>Total al corte:</b> ${a.total_con_derecho ?? pad.length} · <b>Quórum requerido (mitad más uno):</b> ${a.quorum_requerido ?? (Math.floor(pad.length / 2) + 1)}</p>
+    <table><tr><th style="width:4%">№</th><th>Nombre completo (como aparece en el corte)</th><th style="width:9%">No. afil.</th><th style="width:11%">Identificación</th><th style="width:8%">Gafete</th><th style="width:8%">Modalidad</th><th style="width:7%">Hora</th><th style="width:18%">Firma</th></tr>
+      ${pad.map((x, i) => { const s = reg.get(x.afiliado_id); return `<tr><td>${i + 1}</td><td>${v(x.nombre_completo)}</td><td>${x.numero_afiliacion ?? ''}</td><td>${s ? v(s.identificacion) : '☐ INE ☐ Otra'}</td><td>${s ? (s.gafete ? 'Sí' : 'No') : '☐ Sí ☐ No'}</td><td>${s ? (s.modalidad === 'R' ? 'Remota' : 'Presencial') : '☐ P ☐ R'}</td><td>${s ? hora(s.checkin_at) : '__:__'}</td><td>${s ? '' : ''}</td></tr>`; }).join('')}</table>
+    <p class="small">Modalidad: P = presencial · R = remota. Quien aparece en el corte y se identifica se registra y vota aunque no traiga el gafete impreso; se anota en observaciones.</p>
+    <h2>Observadores (sin voz ni voto)</h2>
+    <table><tr><th style="width:4%">№</th><th>Nombre completo</th><th>Motivo (no está en el corte, invitado, autoridad sindical)</th><th style="width:8%">Hora</th><th style="width:18%">Firma</th></tr>${(obs.length ? obs : [{}, {}, {}]).map((s, i) => `<tr><td>${i + 1}</td><td>${v(s.nombre)}</td><td>${v(s.motivo_observador)}</td><td>${s.checkin_at ? hora(s.checkin_at) : '__:__'}</td><td></td></tr>`).join('')}</table>
+    <p><b>Observaciones (personas en el corte sin gafete, incidencias):</b> ${asis.filter(s => s.incidencia).map(s => v(s.nombre) + ': ' + v(s.incidencia)).join(' · ') || '____________________________________________'}</p>
+    <p><b>Asistentes con derecho a voto:</b> ${asis.filter(s => s.con_derecho).length} · <b>Registró (nombre y firma):</b> ______________________________ · Secretaría de Organización de la Sección</p>
+    ${pieFT('Formato AS-05 (prellenado por la plataforma)')}</div>`;
+}
+function computoAS06(a, q, verifs) {
+  const hora = ts => ts ? new Date(ts).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' }) : '____:____';
+  const hay = q && q.hay_quorum;
+  return `<div class="documento">${membreteFT('Cómputo de quórum e informe al Secretario General Seccional')}
+    <p><b>${secLabel(a)}</b> · Asamblea ${v(a.tipo)} · <b>Fecha:</b> ${fechaLarga(a.fecha)} · <b>Hora convocada:</b> ${horaCorta(a.hora)}</p>
+    <h2>1. Cómputo al cierre del registro</h2>
+    <table><tr><th>Concepto</th><th style="width:14%">Número</th></tr>
+      <tr><td>A. Afiliados adscritos a la Sección con derecho a voto al corte de tres días antes (${fechaLarga(a.corte_fecha)})</td><td>${q ? q.total_con_derecho ?? '' : ''}</td></tr>
+      <tr><td>B. Quórum requerido: la mitad más uno de A</td><td>${q ? q.quorum_requerido ?? '' : ''}</td></tr>
+      <tr><td>C. Asistentes con derecho a voto registrados</td><td>${q ? q.presentes : ''}</td></tr>
+      <tr><td>D. De C, presentes en modalidad remota (sólo si la convocatoria lo permite)</td><td>${q ? q.remotos : ''}</td></tr>
+      <tr><td>E. Observadores registrados (no cuentan para el quórum)</td><td>${q ? q.observadores : ''}</td></tr></table>
+    <p><b>Resultado:</b> ${hay ? '☒' : '☐'} <b>Hay quórum</b> (C es igual o mayor que B) &nbsp; ${q && !hay ? '☒' : '☐'} <b>No hay quórum</b> (C es menor que B) · <b>Hora del cómputo:</b> ${a.instalada_at ? hora(a.instalada_at) : hora(null)}</p>
+    <h2>2. Informe al Secretario General Seccional</h2>
+    <p>La Secretaría de Organización de la Sección informa al Secretario General del Comité Ejecutivo Seccional que, verificada la asistencia con base en el registro de afiliados adscritos a la Sección al corte indicado, se encuentran presentes <b>${q ? q.presentes : '______'}</b> personas afiliadas con derecho a voto de un total de <b>${q ? q.total_con_derecho ?? '______' : '______'}</b>, por lo que ${hay ? '☒' : '☐'} <b>existe</b> ${q && !hay ? '☒' : '☐'} <b>no existe</b> el quórum requerido para instalar la asamblea.</p>
+    <div class="firmas"><div>Nombre y firma · Secretaría de Organización de la Sección</div><div>Recibí · Secretario General del Comité Ejecutivo Seccional · Hora ____:____</div></div>
+    <p class="small"><b>Si no hay quórum.</b> El Secretario General Seccional no declara instalada la asamblea y no se adopta ningún acuerdo. Organización deja constancia en este formato, conserva la lista de asistencia y el Comité Ejecutivo Seccional acuerda una nueva convocatoria conforme al Estatuto. Se informa a la Secretaría de Organización del CEN el mismo día.</p>
+    <h2>3. Conservación del quórum durante las votaciones</h2>
+    <table><tr><th>Punto del orden del día</th><th style="width:10%">Hora</th><th style="width:16%">Presentes con derecho a voto</th><th style="width:18%">¿Se conserva el quórum?</th><th style="width:18%">Escrutador que confirma</th></tr>${(verifs.length ? verifs : [{}, {}, {}]).map(x => `<tr><td>${v(x.punto)}</td><td>${x.verificado_at ? hora(x.verificado_at) : '____:____'}</td><td>${x.presentes ?? ''}</td><td>${x.verificado_at ? (x.conserva ? '☒ Sí ☐ No' : '☐ Sí ☒ No') : '☐ Sí ☐ No'}</td><td></td></tr>`).join('')}</table>
+    <p class="small"><i>Este formato se anexa a la lista de asistencia y se sube con ella a la carpeta 04-Asambleas. En la Asamblea Constitutiva lo llena y firma la Secretaría de Organización del CEN.</i></p>
+    ${pieFT('Formato AS-06 (prellenado por la plataforma)')}</div>`;
+}
+async function datosAsamblea() {
+  const [r1, r2, r3, r4, r5] = await Promise.all([
+    sb.from('v_asambleas').select('*').eq('id', id).single(),
+    sb.from('asamblea_padron').select('*').eq('asamblea_id', id).order('nombre_completo'),
+    sb.from('asistencias').select('*').eq('asamblea_id', id).order('checkin_at'),
+    sb.from('asamblea_verificaciones').select('*').eq('asamblea_id', id).order('verificado_at'),
+    sb.rpc('computo_quorum', { p_asamblea: id }),
+  ]);
+  let pad = r2.data || [];
+  if (r1.data && !r1.data.corte_congelado_at) { const { data } = await sb.from('v_padron').select('id, numero_afiliacion, folio, nombre_completo').eq('seccion_id', r1.data.seccion_id).eq('estatus', 'Activo').lte('fecha_alta', r1.data.corte_fecha).order('nombre_completo'); pad = (data || []).map(x => ({ afiliado_id: x.id, ...x })); }
+  return { a: r1.data, pad, asis: r3.data || [], verifs: r4.data || [], q: r5.data && r5.data[0] ? r5.data[0] : null };
+}
+
 // ===================== Despacho =====================
 try {
   if (tipo === 'solicitud' || tipo === 'cedula' || tipo === 'dictamen' || tipo === 'prevencion') {
@@ -263,6 +352,13 @@ try {
     else if (tipo === 'gafete') await anexo14(x, cfg);
     else if (tipo === 'finanzas') doc.innerHTML = cartaFinanzas(x, cfg);
     else { const u = credencial(x); const { toCanvas } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm'); toCanvas($('#qr'), u, { width: 78, margin: 0, color: { dark: '#171717' } }); }
+  } else if (['convocatoria', 'lista_corte', 'asistencia', 'quorum'].includes(tipo)) {
+    const d = await datosAsamblea();
+    if (!d.a) doc.innerHTML = '<div class="aviso error">No se encontró la asamblea.</div>';
+    else if (tipo === 'convocatoria') doc.innerHTML = convocatoriaAS01(d.a);
+    else if (tipo === 'lista_corte') doc.innerHTML = listaCorte(d.a, d.pad);
+    else if (tipo === 'asistencia') doc.innerHTML = listaAsistenciaAS05(d.a, d.pad, d.asis);
+    else doc.innerHTML = computoAS06(d.a, d.q, d.verifs);
   } else if (tipo === 'comprobante') {
     const [{ data: pg }, cfg] = await Promise.all([sb.from('v_pagos').select('*').eq('id', id).single(), config()]);
     doc.innerHTML = pg ? comprobantePago(pg, cfg) : '<div class="aviso error">No se encontró el pago.</div>';

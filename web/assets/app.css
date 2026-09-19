@@ -187,6 +187,8 @@ dl.datos dd { margin: 0; }
 
 /* ===== Documento imprimible (dictamen, prevención, constancia, credencial) ===== */
 .documento { background: #fff; max-width: 820px; margin: 1.5rem auto; padding: 48px 56px; box-shadow: var(--sombra); color: #171717; font-size: 11.5pt; line-height: 1.45; }
+.documento.apaisado { max-width: 10.2in; }
+.documento.apaisado table { font-size: 9.5pt; }
 .documento .membrete { display: flex; align-items: center; gap: 18px; border-bottom: 3px solid var(--rojo); padding-bottom: 14px; margin-bottom: 22px; }
 .documento .membrete img { height: 74px; }
 .documento .membrete b { display: block; font-size: 13pt; }
