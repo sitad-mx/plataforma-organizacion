@@ -17,7 +17,7 @@
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, docsRequeridos, DOC_NOMBRE, DOC_CORTO, ESTADO_INFO, SEMAFORO_TXT, urlFirmada, subirArchivo, validarArchivo, rutaDocumento, mailto, whatsapp, ligaTramite, correoAcuse, correoPrevencion, correoFavorable, correoDesfavorable, correoAlta, correoAlSG, correoFinanzas, correoSeguimiento, waAcuse, waPrevencion, waFavorable, waDesfavorable, waAlta, waSeguimiento, ROOT, CFG } from '../assets/app.js';
+import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, docsRequeridos, DOC_NOMBRE, DOC_CORTO, ESTADO_INFO, SEMAFORO_TXT, urlFirmada, subirArchivo, validarArchivo, rutaDocumento, mailto, whatsapp, ligaTramite, correoAcuse, correoPrevencion, correoFavorable, correoDesfavorable, correoAlta, correoAlSG, correoFinanzas, correoSeguimiento, correoEntrega, waAcuse, waPrevencion, waFavorable, waDesfavorable, waAlta, waSeguimiento, waEntrega, oficinaTexto, PAPELERIA_ORIGINAL, ROOT, CFG } from '../assets/app.js';
 import { tarjetaDoc, activarTarjetas } from '../assets/docs-ui.js';
 const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas', 'seccion_organizacion', 'seccion_sg']); if (!p) throw new Error('sin acceso');
 const esSeccion = ['seccion_organizacion', 'seccion_sg'].includes(p.rol);
@@ -58,7 +58,8 @@ function render() {
   if (s.fuera_de_plazo) alertas.push('Esta solicitud está fuera del plazo estatutario. Atiéndela hoy.');
   const dep = Array.isArray(s.dependientes) ? s.dependientes : [];
   const q = `id=${s.id}`; const tel = s.telefono; const pv = correoPrevencion(s, faltantesGuardados());
-  const padC = pad ? { ...pad, seccion: s.seccion, seccion_numero: s.seccion_numero, asamblea_fecha_hora: s.asamblea_fecha_hora, asamblea_direccion: s.asamblea_direccion, convocatoria_url: s.convocatoria_url } : null;
+  const padC = pad ? { ...pad, seccion: s.seccion, seccion_numero: s.seccion_numero, asamblea_fecha_hora: s.asamblea_fecha_hora, asamblea_direccion: s.asamblea_direccion, convocatoria_url: s.convocatoria_url, oficina_domicilio: s.oficina_domicilio, oficina_horario: s.oficina_horario, oficina_contacto_nombre: s.oficina_contacto_nombre, oficina_contacto_telefono: s.oficina_contacto_telefono } : null;
+  const firmaSec = esSeccion ? `Secretaría de Organización · ${s.seccion} · SITAD` : null;
   vista.innerHTML = `
   <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem">
     <div><p class="small muted mb-0">${esc(s.seccion)}${s.seccion_numero ? ' (Sección ' + s.seccion_numero + ')' : ' (sin número: folio por clave ' + esc(s.seccion_clave) + ')'} · ${s.canal === 'publico' ? 'capturada por la persona desde la liga' : 'registrada por la Sección'} · ${esc(s.tipo_movimiento)}</p>
@@ -130,9 +131,22 @@ function render() {
           ${s.sentido === 'Favorable' || s.fecha_envio_sg ? `<li class="${s.fecha_envio_sg ? 'hecho' : ''}"><b>Enviada al Secretario General</b><span>${s.fecha_envio_sg ? fechaLarga(s.fecha_envio_sg) : 'Pendiente'}</span></li>` : ''}
           ${s.sentido === 'Favorable' ? `<li class="${s.fecha_autorizacion_sg ? 'hecho' : ''}"><b>Autorización del SG</b><span>${s.fecha_autorizacion_sg ? fechaLarga(s.fecha_autorizacion_sg) + (s.autorizacion_sg_ref ? ' · ' + esc(s.autorizacion_sg_ref) : '') : 'Pendiente'}</span></li>` : ''}
           ${s.sentido === 'Favorable' ? `<li class="${s.fecha_ejecucion_padron ? 'hecho' : ''}"><b>Alta en el Padrón</b><span>${s.fecha_ejecucion_padron ? fechaLarga(s.fecha_ejecucion_padron) + (pad ? ' · No. ' + pad.numero_afiliacion : '') : 'Automática al autorizar el SG'}</span></li>` : ''}
+          ${pad ? `<li class="${pad.entrega_at ? 'hecho' : ''}"><b>Entrega en oficina</b><span>${pad.entrega_at ? fechaLarga(String(pad.entrega_at).slice(0, 10)) + ' · papelería en resguardo y credencial entregada' : 'Pendiente: la persona pasa a la oficina de su Sección'}</span></li>` : ''}
         </ol>
       </div>
       <div class="tarjeta" id="acciones-caja"><h3>Acciones</h3>${accionesHtml(cerrada)}</div>
+      ${pad ? `<div class="tarjeta" id="entrega-caja">
+        <h3>Entrega en oficina <span class="tiny muted">(credencial y número de afiliado)</span></h3>
+        ${pad.entrega_at ? `<div class="aviso ok small"><b>Entregada</b> el ${fechaLarga(String(pad.entrega_at).slice(0, 10))} en ${esc(pad.entrega_lugar || 'la Sección')}: papelería en original recibida y resguardada; credencial No. ${pad.numero_afiliacion} entregada.${pad.entrega_nota ? '<br>' + esc(pad.entrega_nota) : ''}</div>${esOrg ? `<button class="btn discreto chico" id="e-anular">Anular la entrega (registrada por error)</button>` : ''}` : `
+        <p class="small">La persona debe presentarse en la oficina de la ${esc(s.seccion)} con su papelería <b>en original</b> (solicitud y cédula firmadas, INE, CURP, constancia fiscal). La Sección la coteja contra el expediente digital, la resguarda físicamente, le entrega su credencial con su número de afiliado y le explica cómo trabaja la Sección.</p>
+        <p class="tiny muted">${esc(oficinaTexto(padC, s))}</p>
+        ${(esOrg || esSeccion) ? `<div class="envio"><span class="small"><b>Recordarle que pase a la oficina</b></span> <a class="btn wa chico" href="${whatsapp(tel, waEntrega(padC, s, firmaSec))}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(s.correo, correoEntrega(padC, s, firmaSec).asunto, correoEntrega(padC, s, firmaSec).cuerpo)}">Correo</a></div>
+        <p class="tiny"><a href="${ROOT}documento.html?tipo=credencial&id=${pad.id}" target="_blank">Credencial para imprimir (No. ${pad.numero_afiliacion})</a></p>
+        <label class="casilla small"><input type="checkbox" id="e-papeleria"> Recibí la papelería en original, la cotejé y queda en resguardo físico de la Sección</label>
+        <label class="casilla small"><input type="checkbox" id="e-credencial"> Entregué la credencial con el número de afiliado ${pad.numero_afiliacion}</label>
+        <div class="campo mt-1"><label for="e-nota" class="small">Nota (opcional)</label><input type="text" id="e-nota" placeholder="Ej. Se le explicó el funcionamiento de la Sección; se entregó copia del Estatuto"></div>
+        <button class="btn verde" id="e-registrar">✓ Registrar entrega en oficina</button>` : '<p class="small muted">Pendiente: la persona no ha pasado a la oficina.</p>'}`}
+      </div>` : ''}
       <div class="tarjeta">
         <h3>Enviar a la persona <span class="tiny muted">(plantillas del SG · WhatsApp o correo)</span></h3>
         ${enviar('1 · Acuse de recepción', tel, s.correo, correoAcuse(s).asunto, correoAcuse(s).cuerpo, waAcuse(s))}
@@ -140,9 +154,9 @@ function render() {
         ${s.fecha_dictamen && s.sentido === 'Favorable' ? enviar('3 · Dictamen favorable', tel, s.correo, correoFavorable(s).asunto, correoFavorable(s).cuerpo, waFavorable(s)) : ''}
         ${s.fecha_dictamen && s.sentido === 'Desfavorable' ? enviar('4 · Dictamen desfavorable', tel, s.correo, correoDesfavorable(s).asunto, correoDesfavorable(s).cuerpo, waDesfavorable(s)) : ''}
         ${s.fecha_dictamen ? `<p class="tiny"><a href="${ROOT}documento.html?tipo=dictamen&${q}" target="_blank">FT-001 · Dictamen (imprimir)</a>${s.sentido === 'Favorable' && !s.fecha_autorizacion_sg && !esSeccion ? ` · <a href="${mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo)}">Remitir al Secretario General</a>` : ''}</p>` : ''}
-        ${padC ? (pad.alta_enviada_at ? `<div class="aviso ok small">Alta enviada el ${fechaLarga(String(pad.alta_enviada_at).slice(0, 10))}${pad.alta_enviada_medio ? ' por ' + esc(pad.alta_enviada_medio) : ''}.</div>` : `<div class="aviso small"><b>Alta autorizada por el SG: por enviar.</b> Manda el paso 5 con los documentos y pulsa "Marcar como enviada".</div>`) + enviar(s.asamblea_fecha_hora ? '5 · Alta e información para la asamblea' : '5 · Alta y bienvenida', tel, s.correo, correoAlta(padC, s).asunto, correoAlta(padC, s).cuerpo, waAlta(padC, s)) + (esOrg && !pad.alta_enviada_at ? `<div class="acciones" style="margin:.3rem 0"><button class="btn verde chico" id="a-enviada-wa">✓ Marcar como enviada por WhatsApp</button><button class="btn secundario chico" id="a-enviada-correo">✓ Marcar como enviada por correo</button></div>` : '') + `
-          <p class="tiny"><b>Adjunta a ese mensaje:</b> <a href="${ROOT}documento.html?tipo=constancia&id=${pad.id}" target="_blank">Constancia (Anexo 15)</a> · <a href="${ROOT}documento.html?tipo=gafete&id=${pad.id}" target="_blank">Gafete (Anexo 14)</a> · <a href="${ROOT}documento.html?tipo=credencial&id=${pad.id}" target="_blank">Credencial</a> · <a href="${ROOT}documento.html?tipo=finanzas&id=${pad.id}" target="_blank">Carta de Finanzas (AF-09)</a>. Descárgalos en PDF con el botón de cada documento.</p>
-          ${!esSeccion ? enviar('6 · Cuota sindical (carta AF-09)', tel, s.correo, correoFinanzas(padC, cfg).asunto, correoFinanzas(padC, cfg).cuerpo, correoFinanzas(padC, cfg).cuerpo) + `<p class="tiny"><a href="${mailto(CFG.CORREO_FINANZAS, 'SITAD · Alta en el Padrón · ' + pad.folio, correoAlta(padC, s).finanzas)}">Aviso interno a Finanzas</a></p>` : ''}` : ''}
+        ${padC ? (pad.alta_enviada_at ? `<div class="aviso ok small">Alta enviada el ${fechaLarga(String(pad.alta_enviada_at).slice(0, 10))}${pad.alta_enviada_medio ? ' por ' + esc(pad.alta_enviada_medio) : ''}.</div>` : `<div class="aviso small"><b>Alta autorizada por el SG: carta de aceptación por enviar.</b> Manda el paso 5 (cita a la persona en la oficina de su Sección) y pulsa "Marcar como enviada".</div>`) + (!s.oficina_domicilio ? `<div class="aviso atencion small">La ${esc(s.seccion)} <b>no ha capturado su oficina de atención</b> (domicilio, horario, persona y teléfono). La carta dirá que la Sección la contactará. ${esSeccion ? 'Captúrala en tu portal, pestaña Directorio.' : 'Pídeselo a la Sección o captúralo en Secciones.'}</div>` : '') + enviar(s.asamblea_fecha_hora ? '5 · Carta de aceptación e información para la asamblea' : '5 · Carta de aceptación (cita en la oficina de la Sección)', tel, s.correo, correoAlta(padC, s).asunto, correoAlta(padC, s).cuerpo, waAlta(padC, s)) + (esOrg && !pad.alta_enviada_at ? `<div class="acciones" style="margin:.3rem 0"><button class="btn verde chico" id="a-enviada-wa">✓ Marcar como enviada por WhatsApp</button><button class="btn secundario chico" id="a-enviada-correo">✓ Marcar como enviada por correo</button></div>` : '') + `
+          <p class="tiny"><b>Adjunta a ese mensaje:</b> <a href="${ROOT}documento.html?tipo=constancia&id=${pad.id}" target="_blank">Constancia (Anexo 15)</a>${s.asamblea_fecha_hora ? ` · <a href="${ROOT}documento.html?tipo=gafete&id=${pad.id}" target="_blank">Gafete (Anexo 14)</a>` : ''}. Descárgalos en PDF con el botón del documento. <b>No se envían</b> la credencial ni el número de afiliado: se entregan en persona (tarjeta "Entrega en oficina").</p>
+          ${!esSeccion && pad.entrega_at ? enviar('6 · Cuota sindical (carta AF-09)', tel, s.correo, correoFinanzas(padC, cfg).asunto, correoFinanzas(padC, cfg).cuerpo, correoFinanzas(padC, cfg).cuerpo) + `<p class="tiny"><a href="${mailto(CFG.CORREO_FINANZAS, 'SITAD · Alta en el Padrón · ' + pad.folio, correoAlta(padC, s).finanzas)}">Aviso interno a Finanzas</a></p>` : !esSeccion ? `<p class="tiny muted">6 · La carta de Finanzas (AF-09) lleva el número de afiliado: se envía cuando la persona ya recogió su credencial.</p>` : ''}` : ''}
         <p class="tiny muted mt-2">WhatsApp abre WhatsApp Web o la app con el número de la persona y el mensaje ya escrito; tú solo pulsas enviar. Los correos se abren en tu programa de correo hasta que exista el buzón institucional.</p>
       </div>
     </div>
@@ -208,7 +222,7 @@ function enlazar(cerrada, abierta, req) {
   on('a-prevenir', () => prevenir(req)); on('a-seguimiento', () => seguimiento(req)); on('a-favorable', favorable);
   on('a-preautorizar', async () => { if (!confirm(`Preautorizar la solicitud ${s.folio} de ${s.nombre_completo}: confirmas que revisaste cada documento, que están completos, legibles y firmados con tinta azul, y que los datos coinciden con la INE. Pasa a la Secretaría de Organización del CEN.`)) return; const nota = prompt('Nota para el CEN (opcional):', '') ?? ''; const { error } = await sb.rpc('preautorizar_seccion', { p_id: s.id, p_nota: nota }); if (error) return toast('No se pudo preautorizar: ' + error.message, 'error'); toast('Preautorizada. Ya está en la bandeja del CEN.', 'ok'); cargar(); });
   on('a-regresar', async () => { const motivo = prompt('Motivo para regresarla a la Sección (la Sección lo ve en el seguimiento):'); if (!motivo) return; const { error } = await sb.rpc('regresar_a_seccion', { p_id: s.id, p_motivo: motivo }); if (error) return toast('No se pudo regresar: ' + error.message, 'error'); toast('Regresada a la Sección.', 'ok'); cargar(); });
-  on('a-enviada-wa', () => marcarEnviada('WhatsApp')); on('a-enviada-correo', () => marcarEnviada('correo')); on('a-desfavorable', desfavorable); on('a-subsanada', () => actualizar({ fecha_subsanacion: hoy() }, 'Subsanación registrada; el plazo se reanuda.'));
+  on('e-registrar', registrarEntrega); on('e-anular', anularEntrega); on('a-enviada-wa', () => marcarEnviada('WhatsApp')); on('a-enviada-correo', () => marcarEnviada('correo')); on('a-desfavorable', desfavorable); on('a-subsanada', () => actualizar({ fecha_subsanacion: hoy() }, 'Subsanación registrada; el plazo se reanuda.'));
   on('a-enviar-sg', () => actualizar({ fecha_envio_sg: hoy() }, 'Marcada como enviada al SG.', true));
   on('a-autorizacion-externa', () => { const ref = prompt('¿Cómo autorizó el Secretario General? (oficio, correo o mensaje y fecha). Queda como referencia de la autorización.'); if (!ref) return; const f = prompt('Fecha de la autorización (aaaa-mm-dd):', hoy()); if (!f) return; sb.rpc('registrar_autorizacion_externa', { p_id: s.id, p_fecha: f, p_ref: ref }).then(({ error }) => { if (error) toast('No se pudo registrar: ' + error.message, 'error'); else { toast('Autorización registrada; el alta se ejecutó en automático.', 'ok'); cargar(); } }); });
   on('a-alta', alta); on('a-desistir', () => { if (!confirm('¿Registrar desistimiento? La solicitud queda sin efectos.')) return; actualizar({ fecha_dictamen: hoy(), sentido: 'Desistimiento' }, 'Desistimiento registrado.'); });
@@ -245,6 +259,20 @@ async function seguimiento(req) {
   const { error } = await sb.from('solicitud_seguimientos').insert({ solicitud_id: s.id, tipo: 'seguimiento', puntos });
   if (error) return toast('No se pudo registrar: ' + error.message, 'error');
   await cargar(); toast('Seguimiento registrado. Envíalo con WhatsApp o Correo desde la tarjeta "Seguimiento a la persona".', 'ok');
+}
+async function registrarEntrega() {
+  const pap = $('#e-papeleria').checked, cred = $('#e-credencial').checked;
+  if (!pap || !cred) return toast('Marca las dos casillas: papelería en original recibida y credencial entregada.', 'error');
+  if (!confirm(`Registrar la entrega en oficina de ${s.nombre_completo} (No. ${pad.numero_afiliacion}): papelería en resguardo y credencial entregada. ¿Confirmas?`)) return;
+  const { error } = await sb.rpc('registrar_entrega_presencial', { p_padron: pad.id, p_papeleria: true, p_credencial: true, p_nota: $('#e-nota').value || null });
+  if (error) return toast('No se pudo registrar: ' + error.message, 'error');
+  toast('Entrega registrada. El trámite queda concluido.', 'ok'); cargar();
+}
+async function anularEntrega() {
+  if (!confirm('¿Anular la entrega registrada? Volverá a aparecer como pendiente.')) return;
+  const { error } = await sb.rpc('anular_entrega_presencial', { p_padron: pad.id });
+  if (error) return toast('No se pudo anular: ' + error.message, 'error');
+  toast('Entrega anulada.', 'ok'); cargar();
 }
 async function marcarEnviada(medio) {
   const { error } = await sb.rpc('marcar_alta_enviada', { p_padron: pad.id, p_medio: medio });

@@ -25,7 +25,7 @@
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, param, armazon, docsRequeridos, DOC_CORTO, ESTADO_INFO, fecha, fechaLarga, fechaHoraLarga, subirArchivo, rutaDocumento, ROOT, CFG } from '../assets/app.js';
+import { sb, $, $$, esc, toast, ocupado, param, armazon, docsRequeridos, DOC_CORTO, ESTADO_INFO, fecha, fechaLarga, fechaHoraLarga, subirArchivo, rutaDocumento, oficinaTexto, PAPELERIA_ORIGINAL, ROOT, CFG } from '../assets/app.js';
 import { tarjetaDoc, activarTarjetas } from '../assets/docs-ui.js';
 await armazon({ titulo: 'Consulta de trámite' });
 const res = $('#resultado');
@@ -60,6 +60,7 @@ async function consultar() {
     { t: x.sentido === 'Desfavorable' ? 'Dictamen desfavorable' : 'Revisión y dictamen de la Secretaría de Organización', f: x.fecha_dictamen, ok: !!x.fecha_dictamen },
     { t: 'Autorización del Secretario General', f: null, ok: ['Autorizada', 'Ejecutada en padrón'].includes(x.estado) },
     { t: 'Alta en el Padrón de Afiliados', f: x.fecha_alta, ok: !!x.fecha_alta },
+    ...(x.fecha_alta ? [{ t: 'Entrega de tu credencial en la oficina de tu Sección', f: datos?.entrega_at ? String(datos.entrega_at).slice(0, 10) : null, ok: !!datos?.entrega_at }] : []),
   ];
   res.innerHTML = `
     <div class="tarjeta">
@@ -69,7 +70,8 @@ async function consultar() {
       ${x.mensaje_publico ? `<div class="aviso"><b>Mensaje de la Secretaría de Organización:</b><br>${esc(x.mensaje_publico).replace(/\n/g, '<br>')}</div>` : ''}
       ${segs && segs.length ? `<div class="aviso atencion"><b>Lo que la Secretaría te ha pedido corregir</b> (lo más reciente primero):<ol class="linea-tiempo mt-1">${segs.map(g => `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'} · ${fechaLarga(g.fecha)}</b><span>${(g.puntos || []).length ? g.puntos.map((p, i) => (i + 1) + '. ' + esc(p)).join('<br>') : esc(g.texto || '')}</span></li>`).join('')}</ol>${abiertaTexto(x.estado)}</div>` : ''}
       ${enConstitucion && x.estado !== 'Ejecutada en padrón' ? `<div class="aviso small">Tu Sección está en constitución: con tu alta quedas registrado(a) para la <b>Asamblea Constitutiva</b> del ${esc(fechaHoraLarga(datos.asamblea_fecha_hora))}${datos.asamblea_direccion ? ', ' + esc(datos.asamblea_direccion) : ''}.</div>` : ''}
-      ${x.estado === 'Ejecutada en padrón' ? `<div class="aviso ok small"><b>Ya eres persona afiliada.</b> Tu Constancia de Registro${enConstitucion ? ' y tu gafete para la asamblea' : ' y tu credencial'} te los envía la Secretaría de Organización por correo y WhatsApp. Documentos Básicos del Sindicato: <a href="${CFG.LIGA_DOCUMENTOS_BASICOS}" target="_blank">Estatutos y Documentos Básicos</a>. Para tu cuota sindical, <a href="${ROOT}pagos/?curp=${encodeURIComponent(datos?.curp || '')}">registra tu pago aquí</a>.</div>` : ''}
+      ${x.estado === 'Ejecutada en padrón' ? (datos?.entrega_at ? `<div class="aviso ok small"><b>Ya eres persona afiliada y ya recibiste tu credencial</b> en tu Sección el ${fechaLarga(String(datos.entrega_at).slice(0, 10))}. Documentos Básicos del Sindicato: <a href="${CFG.LIGA_DOCUMENTOS_BASICOS}" target="_blank">Estatutos y Documentos Básicos</a>. Para tu cuota sindical, <a href="${ROOT}pagos/?curp=${encodeURIComponent(datos?.curp || '')}">registra tu pago aquí</a>.</div>` : `<div class="aviso ok small"><b>Tu solicitud fue aceptada: ya formas parte del Sindicato.</b> Tu Constancia de Registro${enConstitucion ? ' y tu gafete para la asamblea' : ''} te ${enConstitucion ? 'los' : 'la'} envía la Secretaría de Organización por correo y WhatsApp. Documentos Básicos del Sindicato: <a href="${CFG.LIGA_DOCUMENTOS_BASICOS}" target="_blank">Estatutos y Documentos Básicos</a>.</div>
+      <div class="aviso atencion"><b>Paso final: recoge tu credencial y tu número de afiliado en tu Sección.</b><br>${esc(oficinaTexto(datos, x))}<br><span class="small">Lleva <b>en original</b> ${PAPELERIA_ORIGINAL}. La Sección integra tu expediente físico y te entrega tu credencial en persona; ahí también te explican cómo trabaja tu Sección y a quién acudir para tu representación sindical.</span></div>`) : ''}
       <ol class="linea-tiempo mt-2">${pasos.map(p => `<li class="${p.ok ? 'hecho' : ''}"><b>${esc(p.t)}</b><span>${p.f ? fechaLarga(p.f) : (p.ok ? 'Hecho' : 'Pendiente')}${p.extra ? ' · ' + esc(p.extra) : ''}</span></li>`).join('')}</ol>
     </div>
     ${abierta ? `<div class="tarjeta"><h3>1. Tus formatos para firmar</h3>
