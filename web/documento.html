@@ -282,8 +282,8 @@ function listaCorte(a, pad) {
   return `<div class="documento">${membreteFT('Padrón al corte · personas con derecho a voto')}
     <p><b>${secLabel(a)}</b> · Asamblea Seccional ${v(a.tipo)} del ${fechaLarga(a.fecha)} · <b>Corte:</b> ${fechaLarga(a.corte_fecha)}${a.corte_congelado_at ? ' (congelado el ' + fechaLarga(String(a.corte_congelado_at).slice(0, 10)) + ')' : ' <b>(sin congelar: lista preliminar)</b>'}</p>
     <p><b>Total con derecho a voto:</b> ${pad.length} · <b>Quórum requerido (mitad más uno):</b> ${Math.floor(pad.length / 2) + 1}</p>
-    <table><tr><th style="width:6%">№</th><th>Nombre completo</th><th style="width:14%">No. afiliación</th><th style="width:20%">Folio</th></tr>${pad.map((x, i) => `<tr><td>${i + 1}</td><td>${v(x.nombre_completo)}</td><td>${x.numero_afiliacion ?? ''}</td><td>${v(x.folio)}</td></tr>`).join('') || '<tr><td colspan="4">Nadie con alta a la fecha del corte.</td></tr>'}</table>
-    <p class="small"><i>Este padrón no se modifica el día de la asamblea, ni para agregar ni para quitar. El derecho a votar lo da este registro; el gafete lo acredita.</i></p>
+    <table><tr><th style="width:6%">№</th><th>Nombre completo</th><th style="width:12%">No. afiliación</th><th style="width:18%">Folio</th><th style="width:26%">Firma al entrar</th></tr>${pad.map((x, i) => `<tr><td>${i + 1}</td><td>${v(x.nombre_completo)}</td><td>${x.numero_afiliacion ?? ''}</td><td>${v(x.folio)}</td><td></td></tr>`).join('') || '<tr><td colspan="5">Nadie con alta a la fecha del corte.</td></tr>'}</table>
+    <p class="small"><i>Este padrón no se modifica el día de la asamblea, ni para agregar ni para quitar. El derecho a votar lo da este registro; el gafete lo acredita. Cada persona firma junto a su nombre al entrar (tinta azul): la lista firmada es la que se usa para votar y para el control de boletas.</i></p>
     ${pieFT('Padrón al corte (Módulo 3)')}</div>`;
 }
 function listaAsistenciaAS05(a, pad, asis) {
