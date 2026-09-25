@@ -145,7 +145,7 @@ export function validarArchivo(f) {
 export function rutaDocumento(slug, folio, tipo, nombre) { return `solicitudes/${slug}/${folio}/${tipo}.${extension(nombre)}`; }
 
 // ===== Correos (textos oficiales AF-04) =====
-export function mailto(para, asunto, cuerpo, cc = '') {
+export function mailto(para, asunto, cuerpo, cc = CFG.CORREO_COPIA) {
   const q = new URLSearchParams(); if (cc) q.set('cc', cc); q.set('subject', asunto); q.set('body', cuerpo);
   return `mailto:${para}?${q.toString().replace(/\+/g, '%20')}`;
 }
