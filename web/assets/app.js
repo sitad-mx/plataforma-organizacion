@@ -113,7 +113,7 @@ export async function armazon({ titulo = '', nav = [], activa = '' } = {}) {
     if (['cen_organizacion', 'cen_lectura', 'sg', 'finanzas'].includes(p.rol)) nav = [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }, { href: ROOT + 'finanzas/', texto: 'Finanzas', id: 'finanzas' }];
   } else if (p && ['cen_organizacion', 'cen_lectura', 'sg', 'finanzas'].includes(p.rol) && !nav.some(n => n.id === 'finanzas')) nav = [...nav, { href: ROOT + 'finanzas/', texto: 'Finanzas', id: 'finanzas' }];
   const enlaces = nav.map(n => `<a href="${n.href}" class="${n.id === activa ? 'activa' : ''}">${esc(n.texto)}</a>`).join('');
-  const usuario = p ? `<span class="usuario">${esc(p.nombre || p.email)}${p.secciones ? ' · ' + esc(p.secciones.denominacion) : ''} · <a href="#" id="salir-enlace">Salir</a></span>` : `<a href="${ROOT}entrar/">Entrar</a>`;
+  const usuario = p ? `<span class="usuario">${esc(p.nombre || p.email)}${p.secciones ? ' · ' + esc(p.secciones.denominacion) : ''} · <a href="${ROOT}cuenta/" title="Cambiar contraseña">Mi cuenta</a> · <a href="#" id="salir-enlace">Salir</a></span>` : `<a href="${ROOT}entrar/">Entrar</a>`;
   const cab = $('#cabecera') || document.body.insertAdjacentElement('afterbegin', Object.assign(document.createElement('header'), { id: 'cabecera' }));
   cab.className = 'cabecera';
   cab.innerHTML = `<div class="interior"><a class="marca" href="${ROOT}"><img src="${ROOT}assets/sitad-mark.png" alt="SITAD"><div><b>${CFG.SINDICATO_CORTO}</b><span>${titulo || 'Secretaría de Organización'}</span></div></a><nav>${enlaces}${usuario}</nav></div>`;

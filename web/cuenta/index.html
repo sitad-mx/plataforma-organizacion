@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mi cuenta · SITAD</title>
+<link rel="icon" href="../assets/sitad-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/app.css">
+</head>
+<body>
+<header id="cabecera"></header>
+<main class="contenido angosto" style="max-width:520px">
+  <h1>Mi cuenta</h1>
+  <p class="muted" id="quien"></p>
+  <form id="forma" class="tarjeta">
+    <h2>Cambiar contraseña</h2>
+    <p class="small muted">Mínimo 8 caracteres. Usa una que no uses en otro lado. Si entraste con la contraseña inicial que te dio Organización, cámbiala ahora.</p>
+    <div class="campo"><label for="clave1">Contraseña nueva</label><input type="password" id="clave1" required minlength="8" autocomplete="new-password"></div>
+    <div class="campo"><label for="clave2">Repítela</label><input type="password" id="clave2" required minlength="8" autocomplete="new-password"></div>
+    <div id="error" class="aviso error oculto"></div>
+    <div id="ok" class="aviso ok oculto"></div>
+    <div class="acciones"><button class="btn" type="submit" id="guardar">Guardar contraseña</button> <a class="btn secundario" id="volver" href="../">Volver</a></div>
+  </form>
+</main>
+<footer id="pie"></footer>
+<script type="module">
+import { sb, $, esc, ocupado, armazon, requerirRol, destinoPorRol, ROL_NOMBRE, ROOT } from '../assets/app.js';
+await armazon({ titulo: 'Mi cuenta' });
+const p = await requerirRol();
+if (p) {
+  $('#quien').textContent = `${p.nombre || p.email} · ${p.email} · ${ROL_NOMBRE[p.rol] || p.rol}`;
+  $('#volver').href = destinoPorRol(p.rol);
+  $('#forma').onsubmit = async e => {
+    e.preventDefault();
+    const a = $('#clave1').value, b = $('#clave2').value; $('#error').classList.add('oculto'); $('#ok').classList.add('oculto');
+    if (a.length < 8) { $('#error').textContent = 'La contraseña debe tener al menos 8 caracteres.'; $('#error').classList.remove('oculto'); return; }
+    if (a !== b) { $('#error').textContent = 'Las dos contraseñas no coinciden.'; $('#error').classList.remove('oculto'); return; }
+    const btn = $('#guardar'); ocupado(btn, true, 'Guardando…');
+    const { error } = await sb.auth.updateUser({ password: a });
+    ocupado(btn, false);
+    if (error) {
+      const m = /different from the old/i.test(error.message) ? 'La contraseña nueva debe ser distinta a la actual.' : /weak|at least/i.test(error.message) ? 'La contraseña es muy corta o muy débil.' : 'No se pudo cambiar: ' + error.message;
+      $('#error').textContent = m; $('#error').classList.remove('oculto'); return;
+    }
+    $('#clave1').value = ''; $('#clave2').value = '';
+    $('#ok').textContent = 'Listo: tu contraseña cambió. La próxima vez entras con la nueva.'; $('#ok').classList.remove('oculto');
+  };
+}
+</script>
+</body>
+</html>
