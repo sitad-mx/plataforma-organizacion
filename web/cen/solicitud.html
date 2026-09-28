@@ -24,22 +24,24 @@ const esSeccion = ['seccion_organizacion', 'seccion_sg'].includes(p.rol);
 await armazon(esSeccion ? { titulo: p.secciones ? p.secciones.denominacion : 'Sección' } : { titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
 $('#volver').href = esSeccion ? ROOT + 'seccion/' : ROOT + 'cen/';
 const esOrg = p.rol === 'cen_organizacion'; const esSecOrg = p.rol === 'seccion_organizacion'; const puedeSubir = esOrg || esSecOrg; const revisa = esOrg || esSecOrg; const id = param('id'); const vista = $('#vista');
-let s, docs, pad, correoSG = '', cfg = {}, segs = [];
+let s, docs, pad, correoSG = '', cfg = {}, segs = [], envios = [];
 const dd = (k, val) => `<dt>${k}</dt><dd>${val == null || val === '' ? '—' : val}</dd>`;
-const enviar = (titulo, tel, correo, asunto, cuerpoCorreo, cuerpoWa, cc) => `<div class="envio"><span class="small"><b>${titulo}</b></span> <a class="btn wa chico" href="${whatsapp(tel, cuerpoWa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(correo, asunto, cuerpoCorreo, cc)}">Correo</a></div>`;
+const quienEnvio = e => e ? `${esc((e.enviado_por_nombre || e.enviado_por_email || '').split(' ')[0])} · ${fecha(e.enviado_at)} · ${e.medio}` : '';
+const enviar = (titulo, tel, correo, asunto, cuerpoCorreo, cuerpoWa, cc, paso) => { const e = paso ? envios.find(x => x.paso === paso) : null; return `<div class="envio"><span class="small"><b>${titulo}</b>${e ? ` <span class="etiqueta verde">✓ enviado: ${quienEnvio(e)}</span>` : ' <span class="etiqueta">sin enviar</span>'}</span> <a class="btn wa chico" href="${whatsapp(tel, cuerpoWa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''} ${paso ? `data-envio="${paso}|whatsapp"` : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(correo, asunto, cuerpoCorreo, cc)}" ${paso ? `data-envio="${paso}|correo"` : ''}>Correo</a></div>`; };
 await cargar();
 
 async function cargar() {
-  const [r1, r2, r3, r4, r5, r6] = await Promise.all([
+  const [r1, r2, r3, r4, r5, r6, r7] = await Promise.all([
     sb.from('v_solicitudes').select('*').eq('id', id).single(),
     sb.from('solicitud_documentos').select('*').eq('solicitud_id', id).order('created_at'),
     sb.from('v_padron').select('*').eq('solicitud_id', id).maybeSingle(),
     esSeccion ? Promise.resolve({ data: [] }) : sb.from('usuarios_roles').select('email').eq('rol', 'sg').eq('activo', true).not('email', 'like', '%@sitad.test').limit(1),
     esSeccion ? Promise.resolve({ data: [] }) : sb.from('configuracion').select('clave, valor'),
     sb.from('solicitud_seguimientos').select('*').eq('solicitud_id', id).order('created_at', { ascending: false }),
+    sb.from('solicitud_envios').select('*').eq('solicitud_id', id).order('enviado_at', { ascending: false }),
   ]);
   if (r1.error || !r1.data) { vista.innerHTML = `<div class="aviso error">No se encontró la solicitud.</div>`; return; }
-  s = r1.data; docs = r2.data || []; pad = r3.data; correoSG = r4.data && r4.data[0] ? r4.data[0].email : ''; s.documentos = docs; segs = r6.data || [];
+  s = r1.data; docs = r2.data || []; pad = r3.data; correoSG = r4.data && r4.data[0] ? r4.data[0].email : ''; s.documentos = docs; segs = r6.data || []; envios = r7.data || [];
   cfg = Object.fromEntries((r5.data || []).map(x => [x.clave, x.valor]));
   render();
 }
@@ -62,6 +64,11 @@ function render() {
   if (s.duplicado) alertas.push('Posible duplicado: hay otra solicitud viva o un afiliado activo con la misma CURP o el mismo correo. Si es la misma persona, no se abre nuevo trámite: responde indicando el folio existente.');
   if (!s.documentos_completos && !cerrada) alertas.push(`Expediente incompleto: faltan ${faltan.map(d => d.corto).join(', ')}.`);
   if (s.fuera_de_plazo) alertas.push('Esta solicitud está fuera del plazo estatutario. Atiéndela hoy.');
+  const env = k => envios.find(e => e.paso === k);
+  const pasoTxt = (nombre, e) => e ? `<span class="etiqueta verde">✓ ${nombre}: ${quienEnvio(e)}</span>` : `<span class="etiqueta">○ ${nombre}: sin enviar</span>`;
+  const comunicacion = [pasoTxt('Acuse', env('acuse')), s.fecha_prevencion ? pasoTxt('Prevención', env('prevencion')) : '', s.fecha_dictamen ? pasoTxt('Dictamen', env('dictamen')) : '',
+    pad ? (pad.alta_enviada_at ? `<span class="etiqueta verde">✓ Carta de aceptación: ${fecha(pad.alta_enviada_at)} · ${esc(pad.alta_enviada_medio || '')}</span>` : `<span class="etiqueta">○ Carta de aceptación: sin enviar</span>`) : '',
+    pad ? (pad.entrega_at ? `<span class="etiqueta verde">✓ Credencial entregada ${fecha(pad.entrega_at)}</span>` : `<span class="etiqueta">○ Entrega en oficina: pendiente</span>`) : ''].filter(Boolean).join(' ');
   const dep = Array.isArray(s.dependientes) ? s.dependientes : [];
   const q = `id=${s.id}`; const tel = s.telefono; const pv = correoPrevencion(s, faltantesGuardados());
   const padC = pad ? { ...pad, seccion: s.seccion, seccion_numero: s.seccion_numero, asamblea_fecha_hora: s.asamblea_fecha_hora, asamblea_direccion: s.asamblea_direccion, convocatoria_url: s.convocatoria_url, oficina_domicilio: s.oficina_domicilio, oficina_horario: s.oficina_horario, oficina_contacto_nombre: s.oficina_contacto_nombre, oficina_contacto_telefono: s.oficina_contacto_telefono } : null;
@@ -76,7 +83,7 @@ function render() {
   </div>
   ${alertas.map(a => `<div class="aviso ${/fuera del plazo|duplicado|confianza/.test(a) ? 'error' : /NOVEDAD/.test(a) ? '' : 'atencion'} small">${esc(a)}</div>`).join('')}
 
-  <div class="tarjeta mt-2" style="padding:.8rem 1rem;line-height:2"><b class="small">Expediente (${req.filter(presente).length} de ${req.length}):</b> ${resumen} <span class="tiny muted">· Cada documento se valida abajo con "Marcar correcto"; queda quién lo validó y cuándo.</span></div>
+  <div class="tarjeta mt-2" style="padding:.8rem 1rem;line-height:2"><b class="small">Expediente (${req.filter(presente).length} de ${req.length}):</b> ${resumen} <span class="tiny muted">· Cada documento se valida abajo con "Marcar correcto"; queda quién lo validó y cuándo.</span><br><b class="small">Mensajes:</b> ${comunicacion}</div>
   <div class="ficha mt-2">
     <div>
       <div class="tarjeta">
@@ -128,15 +135,25 @@ function render() {
 
     <div class="lateral">
       <div class="tarjeta">
+        <h3>Mensajes a la persona <span class="tiny muted">(en este orden; textos oficiales del SG)</span></h3><p class="tiny muted">Al pulsar WhatsApp o Correo queda registrado quién lo envió y cuándo, para que nadie lo repita.</p>
+        ${enviar('1 · Acuse de recepción', tel, s.correo, correoAcuse(s).asunto, correoAcuse(s).cuerpo, waAcuse(s), undefined, 'acuse')}
+        ${s.fecha_prevencion ? enviar('2 · Prevención (faltantes + liga para corregir)', tel, s.correo, pv.asunto, pv.cuerpo, waPrevencion(s, faltantesGuardados()), undefined, 'prevencion') + `<p class="tiny"><a href="${ROOT}documento.html?tipo=prevencion&${q}" target="_blank">FT-002 · Prevención (imprimir)</a></p>` : ''}
+        ${s.fecha_dictamen && s.sentido === 'Favorable' ? enviar('3 · Dictamen favorable', tel, s.correo, correoFavorable(s).asunto, correoFavorable(s).cuerpo, waFavorable(s), undefined, 'dictamen') : ''}
+        ${s.fecha_dictamen && s.sentido === 'Desfavorable' ? enviar('4 · Dictamen desfavorable', tel, s.correo, correoDesfavorable(s).asunto, correoDesfavorable(s).cuerpo, waDesfavorable(s), undefined, 'dictamen') : ''}
+        ${s.fecha_dictamen ? `<p class="tiny"><a href="${ROOT}documento.html?tipo=dictamen&${q}" target="_blank">FT-001 · Dictamen (imprimir)</a>${s.sentido === 'Favorable' && !s.fecha_autorizacion_sg && !esSeccion ? ` · <a href="${mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo)}">Remitir al Secretario General</a>` : ''}</p>` : ''}
+        ${padC ? (pad.alta_enviada_at ? `<div class="aviso ok small">Alta enviada el ${fechaLarga(String(pad.alta_enviada_at).slice(0, 10))}${pad.alta_enviada_medio ? ' por ' + esc(pad.alta_enviada_medio) : ''}.</div>` : `<div class="aviso small"><b>Alta en el Padrón: carta de aceptación por enviar.</b> Manda el paso 5 (cita a la persona en la oficina de su Sección) y pulsa "Marcar como enviada".</div>`) + (!s.oficina_domicilio ? `<div class="aviso atencion small">La ${esc(s.seccion)} <b>no ha capturado su oficina de atención</b> (domicilio, horario, persona y teléfono). La carta dirá que la Sección la contactará. ${esSeccion ? 'Captúrala en tu portal, pestaña Directorio.' : 'Pídeselo a la Sección o captúralo en Secciones.'}</div>` : '') + enviar(s.asamblea_fecha_hora ? '5 · Carta de aceptación e información para la asamblea' : '5 · Carta de aceptación (cita en la oficina de la Sección)', tel, s.correo, correoAlta(padC, s).asunto, correoAlta(padC, s).cuerpo, waAlta(padC, s)) + (esOrg && !pad.alta_enviada_at ? `<div class="acciones" style="margin:.3rem 0"><button class="btn verde chico" id="a-enviada-wa">✓ Marcar como enviada por WhatsApp</button><button class="btn secundario chico" id="a-enviada-correo">✓ Marcar como enviada por correo</button></div>` : '') + `
+          <p class="tiny"><b>Adjunta a ese mensaje:</b> <a href="${ROOT}documento.html?tipo=constancia&id=${pad.id}" target="_blank">Constancia (Anexo 15)</a>${s.asamblea_fecha_hora ? ` · <a href="${ROOT}documento.html?tipo=gafete&id=${pad.id}" target="_blank">Gafete (Anexo 14)</a>` : ''}. Descárgalos en PDF con el botón del documento. <b>No se envían</b> la credencial ni el número de afiliado: se entregan en persona (tarjeta "Entrega en oficina").</p>
+          ${!esSeccion && pad.entrega_at ? enviar('6 · Cuota sindical (carta AF-09)', tel, s.correo, correoFinanzas(padC, cfg).asunto, correoFinanzas(padC, cfg).cuerpo, correoFinanzas(padC, cfg).cuerpo, undefined, 'finanzas') + `<p class="tiny"><a href="${mailto(CFG.CORREO_FINANZAS, 'SITAD · Alta en el Padrón · ' + pad.folio, correoAlta(padC, s).finanzas)}">Aviso interno a Finanzas</a></p>` : !esSeccion ? `<p class="tiny muted">6 · La carta de Finanzas (AF-09) lleva el número de afiliado: se envía cuando la persona ya recogió su credencial.</p>` : ''}` : ''}
+        <p class="tiny muted mt-2">WhatsApp abre WhatsApp Web o la app con el número de la persona y el mensaje ya escrito; tú solo pulsas enviar. Los correos se abren en tu programa de correo hasta que exista el buzón institucional.</p>
+      </div>
+      <div class="tarjeta">
         <h3>Trámite</h3>
         <ol class="linea-tiempo">
           <li class="hecho"><b>Recibida</b><span>${fechaLarga(s.fecha_recepcion)} · límite para prevenir ${fecha(s.limite_prevencion)}</span></li>
           ${s.fecha_prevencion ? `<li class="hecho"><b>Prevenida</b><span>${fechaLarga(s.fecha_prevencion)} · plazo para subsanar ${fecha(s.limite_subsanacion)}</span></li>` : ''}
           ${s.fecha_subsanacion ? `<li class="hecho"><b>Subsanada</b><span>${fechaLarga(s.fecha_subsanacion)} · nuevo límite de dictamen ${fecha(s.limite_dictamen)}</span></li>` : ''}
           <li class="${s.fecha_dictamen ? 'hecho' : ''}"><b>Dictamen ${s.sentido ? '· ' + esc(s.sentido) : ''}</b><span>${s.fecha_dictamen ? fechaLarga(s.fecha_dictamen) : 'Pendiente · límite ' + fecha(s.limite_dictamen)}</span></li>
-          ${s.sentido === 'Favorable' || s.fecha_envio_sg ? `<li class="${s.fecha_envio_sg ? 'hecho' : ''}"><b>Enviada al Secretario General</b><span>${s.fecha_envio_sg ? fechaLarga(s.fecha_envio_sg) : 'Pendiente'}</span></li>` : ''}
-          ${s.sentido === 'Favorable' ? `<li class="${s.fecha_autorizacion_sg ? 'hecho' : ''}"><b>Autorización del SG</b><span>${s.fecha_autorizacion_sg ? fechaLarga(s.fecha_autorizacion_sg) + (s.autorizacion_sg_ref ? ' · ' + esc(s.autorizacion_sg_ref) : '') : 'Pendiente'}</span></li>` : ''}
-          ${s.sentido === 'Favorable' ? `<li class="${s.fecha_ejecucion_padron ? 'hecho' : ''}"><b>Alta en el Padrón</b><span>${s.fecha_ejecucion_padron ? fechaLarga(s.fecha_ejecucion_padron) + (pad ? ' · No. ' + pad.numero_afiliacion : '') : 'Automática al autorizar el SG'}</span></li>` : ''}
+          ${s.sentido === 'Favorable' ? `<li class="${s.fecha_ejecucion_padron ? 'hecho' : ''}"><b>Alta en el Padrón</b><span>${s.fecha_ejecucion_padron ? fechaLarga(s.fecha_ejecucion_padron) + (pad ? ' · No. ' + pad.numero_afiliacion : '') : 'Automática con el dictamen favorable'}</span></li>` : ''}
           ${pad ? `<li class="${pad.entrega_at ? 'hecho' : ''}"><b>Entrega en oficina</b><span>${pad.entrega_at ? fechaLarga(String(pad.entrega_at).slice(0, 10)) + ' · papelería en resguardo y credencial entregada' : 'Pendiente: la persona pasa a la oficina de su Sección'}</span></li>` : ''}
         </ol>
       </div>
@@ -153,18 +170,6 @@ function render() {
         <div class="campo mt-1"><label for="e-nota" class="small">Nota (opcional)</label><input type="text" id="e-nota" placeholder="Ej. Se le explicó el funcionamiento de la Sección; se entregó copia del Estatuto"></div>
         <button class="btn verde" id="e-registrar">✓ Registrar entrega en oficina</button>` : '<p class="small muted">Pendiente: la persona no ha pasado a la oficina.</p>'}`}
       </div>` : ''}
-      <div class="tarjeta">
-        <h3>Enviar a la persona <span class="tiny muted">(plantillas del SG · WhatsApp o correo)</span></h3>
-        ${enviar('1 · Acuse de recepción', tel, s.correo, correoAcuse(s).asunto, correoAcuse(s).cuerpo, waAcuse(s))}
-        ${s.fecha_prevencion ? enviar('2 · Prevención (faltantes + liga para corregir)', tel, s.correo, pv.asunto, pv.cuerpo, waPrevencion(s, faltantesGuardados())) + `<p class="tiny"><a href="${ROOT}documento.html?tipo=prevencion&${q}" target="_blank">FT-002 · Prevención (imprimir)</a></p>` : ''}
-        ${s.fecha_dictamen && s.sentido === 'Favorable' ? enviar('3 · Dictamen favorable', tel, s.correo, correoFavorable(s).asunto, correoFavorable(s).cuerpo, waFavorable(s)) : ''}
-        ${s.fecha_dictamen && s.sentido === 'Desfavorable' ? enviar('4 · Dictamen desfavorable', tel, s.correo, correoDesfavorable(s).asunto, correoDesfavorable(s).cuerpo, waDesfavorable(s)) : ''}
-        ${s.fecha_dictamen ? `<p class="tiny"><a href="${ROOT}documento.html?tipo=dictamen&${q}" target="_blank">FT-001 · Dictamen (imprimir)</a>${s.sentido === 'Favorable' && !s.fecha_autorizacion_sg && !esSeccion ? ` · <a href="${mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo)}">Remitir al Secretario General</a>` : ''}</p>` : ''}
-        ${padC ? (pad.alta_enviada_at ? `<div class="aviso ok small">Alta enviada el ${fechaLarga(String(pad.alta_enviada_at).slice(0, 10))}${pad.alta_enviada_medio ? ' por ' + esc(pad.alta_enviada_medio) : ''}.</div>` : `<div class="aviso small"><b>Alta autorizada por el SG: carta de aceptación por enviar.</b> Manda el paso 5 (cita a la persona en la oficina de su Sección) y pulsa "Marcar como enviada".</div>`) + (!s.oficina_domicilio ? `<div class="aviso atencion small">La ${esc(s.seccion)} <b>no ha capturado su oficina de atención</b> (domicilio, horario, persona y teléfono). La carta dirá que la Sección la contactará. ${esSeccion ? 'Captúrala en tu portal, pestaña Directorio.' : 'Pídeselo a la Sección o captúralo en Secciones.'}</div>` : '') + enviar(s.asamblea_fecha_hora ? '5 · Carta de aceptación e información para la asamblea' : '5 · Carta de aceptación (cita en la oficina de la Sección)', tel, s.correo, correoAlta(padC, s).asunto, correoAlta(padC, s).cuerpo, waAlta(padC, s)) + (esOrg && !pad.alta_enviada_at ? `<div class="acciones" style="margin:.3rem 0"><button class="btn verde chico" id="a-enviada-wa">✓ Marcar como enviada por WhatsApp</button><button class="btn secundario chico" id="a-enviada-correo">✓ Marcar como enviada por correo</button></div>` : '') + `
-          <p class="tiny"><b>Adjunta a ese mensaje:</b> <a href="${ROOT}documento.html?tipo=constancia&id=${pad.id}" target="_blank">Constancia (Anexo 15)</a>${s.asamblea_fecha_hora ? ` · <a href="${ROOT}documento.html?tipo=gafete&id=${pad.id}" target="_blank">Gafete (Anexo 14)</a>` : ''}. Descárgalos en PDF con el botón del documento. <b>No se envían</b> la credencial ni el número de afiliado: se entregan en persona (tarjeta "Entrega en oficina").</p>
-          ${!esSeccion && pad.entrega_at ? enviar('6 · Cuota sindical (carta AF-09)', tel, s.correo, correoFinanzas(padC, cfg).asunto, correoFinanzas(padC, cfg).cuerpo, correoFinanzas(padC, cfg).cuerpo) + `<p class="tiny"><a href="${mailto(CFG.CORREO_FINANZAS, 'SITAD · Alta en el Padrón · ' + pad.folio, correoAlta(padC, s).finanzas)}">Aviso interno a Finanzas</a></p>` : !esSeccion ? `<p class="tiny muted">6 · La carta de Finanzas (AF-09) lleva el número de afiliado: se envía cuando la persona ya recogió su credencial.</p>` : ''}` : ''}
-        <p class="tiny muted mt-2">WhatsApp abre WhatsApp Web o la app con el número de la persona y el mensaje ya escrito; tú solo pulsas enviar. Los correos se abren en tu programa de correo hasta que exista el buzón institucional.</p>
-      </div>
     </div>
   </div>`;
   enlazar(cerrada, abierta, req);
@@ -192,7 +197,7 @@ function accionesHtml(cerrada) {
     b.push(s.fecha_prevencion
       ? `<button class="btn secundario" id="a-pedir">Pedirle de nuevo lo que falta (seguimiento)</button><p class="tiny muted">Ya se le previno una vez; esto es un recordatorio y no cambia el plazo.</p>`
       : `<button class="btn secundario" id="a-pedir">Pedirle lo que falta a la persona (prevención)</button><p class="tiny muted">Arma el mensaje con lo que falta y tus observaciones, con el texto oficial. Es una sola vez y corre el plazo de 10 días hábiles; después, los recordatorios son seguimientos.</p>`);
-    b.push(`<button class="btn" id="a-favorable">Validar: dictamen FAVORABLE → al Secretario General</button>`, `<button class="btn secundario" id="a-desfavorable">Dictaminar desfavorable</button>`);
+    b.push(`<button class="btn" id="a-favorable">Dictaminar FAVORABLE (queda en el Padrón)</button><p class="tiny muted">Es el paso final: la persona queda dada de alta y aparecen la constancia, el gafete y la carta de aceptación para enviarle. El Secretario General firma el padrón, no cada solicitud.</p>`, `<button class="btn secundario" id="a-desfavorable">Dictaminar desfavorable</button>`);
   }
   if (s.estado === 'Prevenida') b.push(`<button class="btn secundario" id="a-pedir">Recordarle lo que falta (seguimiento)</button>`, `<button class="btn" id="a-subsanada">Registrar subsanación recibida</button>`, `<button class="btn secundario" id="a-desfavorable">Dictaminar desfavorable (no subsanó)</button>`);
   if (s.estado === 'Dictaminada favorable') b.push(`<button class="btn" id="a-enviar-sg">Marcar como enviada al SG</button>`);
@@ -214,7 +219,7 @@ async function cargarVisores() {
 
 function enlazar(cerrada, abierta, req) {
   $$('[data-abrir]').forEach(a => a.onclick = async e => { e.preventDefault(); const d = docs.find(x => x.id === a.dataset.abrir); try { window.open(await urlFirmada(d.archivo_url), '_blank'); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } });
-  $$('[data-ok]').forEach(b => b.onclick = async () => { const d = docs.find(x => x.id === b.dataset.ok); const { error } = await sb.from('solicitud_documentos').update({ validado: !d.validado, observacion: d.validado ? d.observacion : null, validado_por_nombre: d.validado ? null : (p.nombre || p.email), validado_at: d.validado ? null : new Date().toISOString() }).eq('id', d.id); if (error) toast(error.message, 'error'); else cargar(); });
+  $$('[data-ok]').forEach(b => b.onclick = async () => { const d = docs.find(x => x.id === b.dataset.ok); const { error } = await sb.from('solicitud_documentos').update({ validado: d.validado ? null : true, observacion: d.validado ? d.observacion : null, validado_por_nombre: d.validado ? null : (p.nombre || p.email), validado_at: d.validado ? null : new Date().toISOString() }).eq('id', d.id); if (error) toast(error.message, 'error'); else cargar(); });
   $$('[data-guardar-obs]').forEach(b => b.onclick = async () => { const idd = b.dataset.guardarObs; const o = $(`[data-obs="${idd}"]`).value.trim(); const { error } = await sb.from('solicitud_documentos').update({ observacion: o || null, validado: o ? false : null }).eq('id', idd); if (error) toast(error.message, 'error'); else { toast(o ? 'Observación guardada; la persona la ve en su consulta.' : 'Observación borrada.', 'ok'); cargar(); } });
   $$('[data-subir]').forEach(inp => inp.onchange = async () => { const f = inp.files[0]; const err = validarArchivo(f); if (err) return toast(err, 'error'); const parte = inp.dataset.parte || null; try {
       const ruta = rutaDocumento(s.seccion_slug, s.folio, inp.dataset.subir + (parte ? '-' + parte : ''), f.name).replace(/(\.[a-z0-9]+)$/i, `-${Date.now()}$1`); await subirArchivo(ruta, f);
@@ -222,6 +227,7 @@ function enlazar(cerrada, abierta, req) {
       const { error } = await sb.from('solicitud_documentos').insert({ solicitud_id: s.id, tipo: inp.dataset.subir, parte, archivo_url: ruta, nombre_archivo: f.name }); if (error) throw error;
       if (s.estado === 'Prevenida' && !s.fecha_subsanacion) await sb.from('solicitudes_afiliacion').update({ fecha_subsanacion: hoy() }).eq('id', s.id);
       toast('Documento guardado.', 'ok'); cargar(); } catch (e) { toast('No se pudo subir: ' + (e.message || e), 'error'); } });
+  $$('[data-envio]').forEach(a => a.addEventListener('click', async () => { const [paso, medio] = a.dataset.envio.split('|'); const { error } = await sb.from('solicitud_envios').insert({ solicitud_id: s.id, paso, medio, enviado_por_nombre: p.nombre || p.email }); if (error) toast('No se registró el envío: ' + error.message, 'error'); else setTimeout(cargar, 600); }));
   const on = (i, fn) => { const b = $('#' + i); if (b) b.onclick = fn; };
   on('guardar-notas', () => actualizar({ notas: $('#notas').value }, 'Notas guardadas.'));
   on('guardar-mensaje', () => actualizar({ mensaje_publico: $('#mensaje').value.trim() || null }, 'Mensaje guardado; la persona lo ve en su consulta.'));
@@ -295,11 +301,10 @@ async function favorable() {
   if (s.duplicado) req.push('hay un posible duplicado');
   if (!s.acepta_estatuto) req.push('no aceptó los Estatutos');
   if (req.length && !confirm(`Atención: ${req.join('; ')}. ¿Dictaminar FAVORABLE de todos modos?`)) return;
-  if (!confirm(`Dictaminar FAVORABLE la solicitud ${s.folio} de ${s.nombre_completo} y remitirla al Secretario General para que autorice el alta. ¿Confirmas?`)) return;
-  const { error } = await sb.from('solicitudes_afiliacion').update({ fecha_dictamen: hoy(), sentido: 'Favorable', fecha_envio_sg: hoy(), revisado_at: new Date().toISOString() }).eq('id', s.id);
+  if (!confirm(`Dictaminar FAVORABLE la solicitud ${s.folio} de ${s.nombre_completo}. Queda dada de alta en el Padrón de Afiliados en este acto. ¿Confirmas?`)) return;
+  const { error } = await sb.rpc('dictaminar_favorable', { p_id: s.id });
   if (error) return toast('No se pudo dictaminar: ' + error.message, 'error');
-  await cargar(); toast('Dictamen favorable registrado y enviado al SG (aparece en su bandeja). Se abre el correo al SG; avisa a la persona con el paso 3.', 'ok');
-  window.open(mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo), '_blank');
+  await cargar(); toast('Dictamen favorable registrado y alta en el Padrón. Ahora envía a la persona el dictamen (3) y la carta de aceptación (5) desde "Mensajes a la persona".', 'ok');
 }
 async function desfavorable() {
   const motivo = prompt('Requisito no acreditado y motivo (tal como irá en el dictamen y en el mensaje a la persona):'); if (!motivo) return;
