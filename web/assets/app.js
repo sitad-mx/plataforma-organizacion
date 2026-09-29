@@ -157,7 +157,12 @@ export function airear(texto) {
 // El mismo texto como HTML (párrafos con espacio y ligas clicables), para pegarlo en Outlook con "Copiar con formato"
 export function textoAHtml(texto) {
   const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return airear(texto).split(/\n{2,}/).map(par => '<p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:11pt;line-height:1.45">' + e(par).replace(/\n/g, '<br>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>') + '</p>').join('');
+  // Los puntos de lo que falta (PRIMERO., SEGUNDO., … o "1." "2.") van en negritas para que se distingan (petición de Manuel 28-sep)
+  const esPunto = par => /^((PRIMERO|SEGUNDO|TERCERO|CUARTO|QUINTO|SEXTO|SÉPTIMO|OCTAVO|NOVENO|DÉCIMO)\.|\d+\.)\s/.test(par);
+  return airear(texto).split(/\n{2,}/).map(par => {
+    const cuerpo = e(par).replace(/\n/g, '<br>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>');
+    return '<p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:11pt;line-height:1.45">' + (esPunto(par) ? '<b>' + cuerpo + '</b>' : cuerpo) + '</p>';
+  }).join('');
 }
 export async function copiarHtml(texto) {
   const html = textoAHtml(texto), plano = airear(texto);
@@ -176,7 +181,8 @@ export function correoAcuse(s) {
     cuerpo: `Hola, ${nombre}:\n\nLa Secretaría de Organización del ${CFG.SINDICATO} recibió tu solicitud de afiliación el ${fechaLarga(s.fecha_recepcion)}. Tu folio es ${s.folio}; consérvalo para cualquier consulta.\n\nA partir de hoy la Secretaría revisa tu expediente. Recibirás respuesta en un plazo máximo de diez días hábiles. Si faltara algún documento te lo haremos saber por este medio, una sola vez, con la lista exacta de lo que se necesita.\n\nPuedes consultar el avance con tu folio y tu correo en: ${ROOT}estado/\n\nMientras tanto puedes conocer los Documentos Básicos del Sindicato (Declaración de Principios, Programa de Acción y Estatuto) en: ${LIGA_DOCS}\n\n${FIRMA}` };
 }
 export function correoPrevencion(s, faltantes) {
-  const lista = faltantes.map((f, i) => `${['PRIMERO','SEGUNDO','TERCERO','CUARTO','QUINTO','SEXTO'][i] || (i + 1) + '.'}. ${f}`).join('\n\n');
+  // Cada punto en MAYÚSCULAS (en texto plano no hay negritas); con "Copiar con formato" van además en negritas (petición de Manuel 28-sep)
+  const lista = faltantes.map((f, i) => `${['PRIMERO','SEGUNDO','TERCERO','CUARTO','QUINTO','SEXTO','SÉPTIMO','OCTAVO'][i] || (i + 1) + '.'}. ${f.toUpperCase()}`).join('\n\n');
   const recibidos = (s.documentos || []).map(d => DOC_CORTO[d.tipo] || d.tipo).join(', ') || 'la documentación que obra en el expediente';
   return { asunto: `SITAD · Prevención · Folio ${s.folio} · Documentos faltantes`,
     cuerpo: `${CFG.LUGAR_EXPEDICION}, a ${fechaLarga(s.fecha_prevencion || hoy())}\n\nAsunto: Afiliación. Prevención de documentos faltantes.\n\nVista la solicitud de afiliación presentada el ${fechaLarga(s.fecha_recepcion)} por ${s.nombre_completo.toUpperCase()}, para su adscripción a la ${s.seccion}, con la siguiente documentación: ${recibidos}.\n\nDe su revisión se advierte que el expediente está incompleto en lo siguiente:\n\n${lista}\n\nEn consecuencia, y por una sola vez, se le previene para que remita lo señalado a más tardar el ${fechaLarga(s.limite_subsanacion)}. Recibida la documentación, la Secretaría continuará la revisión por los días hábiles que quedaron pendientes del plazo para dictaminar. Si la prevención no se atiende en tiempo, la solicitud se resolverá con los elementos que obren en el expediente.
