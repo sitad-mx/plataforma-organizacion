@@ -194,15 +194,16 @@ function render() {
 function faltantesGuardados() { const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCION\]/.exec(s.notas || ''); return m ? m[1].trim().split('\n').filter(Boolean) : ['Ver oficio de prevención.']; }
 
 // Resumen de la revisión (para el revisor): qué se le va a pedir a la persona, o "listo para dictamen favorable".
-function resumenRevision() {
+const nombreDoc = d => (DOC_NOMBRE[d.tipo] || d.tipo) + (d.parte ? ' (' + d.parte + ')' : '');
+function pendientesRevision() {
   const req = docsRequeridos(s.actividad_transporte);
   const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
   const presente = d => d.partes ? (!!existentes[d.tipo + '|'] || d.partes.every(([pt]) => existentes[d.tipo + '|' + pt])) : !!existentes[d.tipo + '|'];
-  const nombre = d => (DOC_NOMBRE[d.tipo] || d.tipo) + (d.parte ? ' (' + d.parte + ')' : '');
-  const faltan = req.filter(d => !presente(d)).map(d => d.nombre);
-  const conObs = docs.filter(d => d.observacion && d.validado !== true);
-  const sinConfirmar = docs.filter(d => d.validado == null && !d.observacion);
-  if (!faltan.length && !conObs.length && !sinConfirmar.length) return `<div class="aviso ok small"><b>✅ Listo para dictamen favorable.</b> Expediente completo y los ${docs.length} documentos confirmados como correctos.</div>`;
+  return { faltan: req.filter(d => !presente(d)).map(d => d.nombre), conObs: docs.filter(d => d.observacion && d.validado !== true), sinConfirmar: docs.filter(d => d.validado == null && !d.observacion) };
+}
+function resumenRevision() {
+  const nombre = nombreDoc; const { faltan, conObs, sinConfirmar } = pendientesRevision();
+  if (!faltan.length && !conObs.length && !sinConfirmar.length) return `<div class="aviso ok small"><b>✅ Listo para dictamen favorable.</b> Expediente completo y los ${docs.length} documentos confirmados como correctos. Ya aparece en la bandeja como "lista para dictaminar".</div>`;
   if (!faltan.length && !conObs.length) return `<div class="aviso small"><b>Expediente completo; faltan por confirmar ${sinConfirmar.length} documento(s):</b> ${sinConfirmar.map(nombre).map(esc).join(', ')}.${sinConfirmar.some(d => d.prevalidacion === 'correcto') ? ' La prerrevisión sugiere marcarlos correctos: confírmalo arriba en cada uno y quedará listo para dictamen.' : ''}</div>`;
   const puntos = [...faltan.map(f => `Falta: ${f}`), ...conObs.map(d => `${nombre(d)}: ${d.observacion}`)];
   return `<div class="aviso atencion small"><b>Se le pedirá a la persona (${puntos.length} punto${puntos.length === 1 ? '' : 's'}):</b><ol style="margin:.3rem 0 0 1.1rem;padding:0">${puntos.map(x => `<li>${esc(x)}</li>`).join('')}</ol>${sinConfirmar.length ? `<span class="tiny muted">Además ${sinConfirmar.length} documento(s) sin confirmar: ${sinConfirmar.map(nombre).map(esc).join(', ')}.</span>` : ''}</div>`;
@@ -210,7 +211,7 @@ function resumenRevision() {
 function accionesHtml(cerrada) {
   const abierta = ['Recibida', 'Prevenida', 'Subsanada'].includes(s.estado);
   const resumen = abierta ? resumenRevision() : '';
-  const pre = resumen + (s.preautorizada_at ? `<div class="aviso ok small"><b>${s.preautorizada_por ? 'Preautorizada por la Sección' : 'Expediente revisado'}</b> el ${fechaLarga(String(s.preautorizada_at).slice(0, 10))}${s.preautorizacion_nota ? ': ' + esc(s.preautorizacion_nota) : ''}. Lista para dictaminar.</div>` : (abierta ? `<div class="aviso atencion small"><b>Todavía no está lista para dictaminar.</b> Falta completar el expediente o marcarlo como revisado.</div>` : ''));
+  const pre = resumen + (s.preautorizada_at && s.preautorizada_por ? `<div class="aviso ok small"><b>Preautorizada por la Sección</b> el ${fechaLarga(String(s.preautorizada_at).slice(0, 10))}${s.preautorizacion_nota ? ': ' + esc(s.preautorizacion_nota) : ''}.</div>` : '');
   if (esSecOrg) {
     const b = [];
     if (abierta && !s.preautorizada_at) b.push(`<button class="btn verde" id="a-preautorizar">Preautorizar y enviar al CEN</button><p class="tiny muted">Solo cuando el expediente esté completo, cada documento revisado y sin observaciones pendientes.</p>`);
@@ -221,7 +222,6 @@ function accionesHtml(cerrada) {
   const b = [];
   if (s.con_novedad) b.push(`<button class="btn secundario" id="a-revisado">Marcar como revisado (quitar novedad)</button>`);
   if (cerrada) { b.push(`<p class="small muted">Trámite concluido.</p>`); return pre + `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div>`; }
-  if (abierta && !s.preautorizada_at) b.push(`<button class="btn secundario" id="a-preautorizar">Expediente revisado y completo → listo para dictaminar</button>`);
   if (abierta && s.preautorizada_at && s.preautorizada_por) b.push(`<button class="btn discreto chico" id="a-regresar">Regresar a la Sección (con motivo)</button>`);
   if (['Recibida', 'Subsanada'].includes(s.estado)) {
     b.push(s.fecha_prevencion
@@ -324,13 +324,19 @@ async function marcarEnviada(medio) {
   toast('Alta marcada como enviada por ' + medio + '.', 'ok'); cargar();
 }
 async function favorable() {
+  const { faltan, conObs, sinConfirmar } = pendientesRevision();
   const req = [];
-  if (!s.documentos_completos) req.push('el expediente no está completo');
-  if (docs.some(d => d.validado === false)) req.push('hay documentos con observación sin corregir');
+  if (faltan.length) req.push(`FALTAN documentos: ${faltan.join(', ')}`);
+  if (conObs.length) req.push(`hay ${conObs.length} documento(s) con observación guardada sin corregir: ${conObs.map(nombreDoc).join(', ')}`);
+  if (sinConfirmar.length) req.push(`hay ${sinConfirmar.length} documento(s) que no has confirmado como correctos: ${sinConfirmar.map(nombreDoc).join(', ')}`);
   if (s.es_confianza) req.push('la persona declaró funciones de confianza');
   if (s.duplicado) req.push('hay un posible duplicado');
   if (!s.acepta_estatuto) req.push('no aceptó los Estatutos');
-  if (req.length && !confirm(`Atención: ${req.join('; ')}. ¿Dictaminar FAVORABLE de todos modos?`)) return;
+  if (req.length) {
+    // Dos alertas cuando el expediente NO está limpio (instrucción de Manuel 28-sep): evita dictaminar por error
+    if (!confirm(`⚠ ATENCIÓN (1 de 2): este expediente NO está listo para dictamen favorable.\n\n• ${req.join('\n• ')}\n\n¿Estás seguro de que quieres dictaminarlo FAVORABLE de todos modos?`)) return;
+    if (!confirm(`⚠ ATENCIÓN (2 de 2): al dictaminar FAVORABLE, ${s.nombre_completo} queda dada de alta en el Padrón con este expediente tal como está. Lo normal es pedirle lo que falta o confirmar los documentos antes.\n\n¿Confirmas que de todos modos quieres dictaminar FAVORABLE?`)) return;
+  }
   if (!confirm(`Dictaminar FAVORABLE la solicitud ${s.folio} de ${s.nombre_completo}. Queda dada de alta en el Padrón de Afiliados en este acto. ¿Confirmas?`)) return;
   const { error } = await sb.rpc('dictaminar_favorable', { p_id: s.id });
   if (error) return toast('No se pudo dictaminar: ' + error.message, 'error');
