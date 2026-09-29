@@ -18,6 +18,7 @@
   </div>
   <div class="pestanas" id="pestanas">
     <button data-p="solicitudes" class="activa">Solicitudes</button>
+    <button data-p="novedades" id="tab-novedades">Novedades</button>
     <button data-p="padron">Padrón</button>
     <button data-p="secciones">Secciones</button>
     <button data-p="asambleas">Asambleas</button>
@@ -28,11 +29,33 @@
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, ESTADO_INFO, SEMAFORO_TXT, correoAlSG, mailto, ROOT, CFG } from '../assets/app.js';
+import { sb, $, $$, esc, toast, ocupado, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, ESTADO_INFO, SEMAFORO_TXT, DOC_NOMBRE, correoAlSG, mailto, ROOT, CFG } from '../assets/app.js';
 const p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas']); if (!p) throw new Error('sin acceso');
 await armazon({ titulo: 'Organización del CEN', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }], activa: 'cen' });
 const panel = $('#panel'); const esOrg = p.rol === 'cen_organizacion';
-const PANELES = { solicitudes, padron, secciones, asambleas, tablero, trimestre };
+const PANELES = { solicitudes, novedades, padron, secciones, asambleas, tablero, trimestre };
+const fh = d => d ? fecha(String(d).slice(0, 10)) + ' ' + String(d).slice(11, 16) : '';
+async function contarNovedades() { const { count } = await sb.from('v_solicitudes').select('id', { count: 'exact', head: true }).eq('con_novedad', true); const b = $('#tab-novedades'); if (b) b.textContent = 'Novedades' + (count ? ' (' + count + ')' : ''); }
+contarNovedades();
+// ===== Novedades: solo lo que llegó desde la última revisión de cada expediente (petición de Manuel 29-sep) =====
+async function novedades() {
+  panel.innerHTML = '<p class="cargando">Cargando novedades…</p>';
+  const { data, error } = await sb.from('v_solicitudes').select('id, folio, nombre_completo, seccion, estado, etapa, novedad_at, revisado_at, fecha_prevencion, limite_subsanacion, telefono, correo, documentos_completos').eq('con_novedad', true).order('novedad_at', { ascending: false });
+  if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
+  const ids = (data || []).map(x => x.id);
+  const [{ data: docs }, { data: segs }] = ids.length ? await Promise.all([sb.from('solicitud_documentos').select('solicitud_id, tipo, parte, created_at, validado, observacion, prevalidacion, prevalidacion_nota').in('solicitud_id', ids).order('created_at'), sb.from('solicitud_seguimientos').select('solicitud_id, tipo, texto, puntos, origen, created_at').in('solicitud_id', ids).order('created_at')]) : [{ data: [] }, { data: [] }];
+  $('#resumen').textContent = `${(data || []).length} expediente(s) con algo nuevo`;
+  const b = $('#tab-novedades'); if (b) b.textContent = 'Novedades' + ((data || []).length ? ' (' + (data || []).length + ')' : '');
+  const nombreDoc = d => (DOC_NOMBRE[d.tipo] || d.tipo) + (d.parte ? ' (' + d.parte + ')' : '');
+  panel.innerHTML = `<p class="small muted">Aquí solo aparece lo que la persona (o Claude desde el buzón) subió o escribió <b>después de tu última revisión</b> de ese expediente. Abre la ficha, revisa lo nuevo y pulsa <b>"Ya lo revisé"</b> en Acciones: desaparece de esta lista.</p>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Desde</th><th>Persona</th><th>Estado</th><th>Qué hay de nuevo</th><th></th></tr></thead><tbody>${(data || []).length ? (data || []).map(s => {
+      const desde = s.revisado_at || '';
+      const nuevosDocs = (docs || []).filter(d => d.solicitud_id === s.id && (!desde || d.created_at > desde));
+      const nuevosMsg = (segs || []).filter(g => g.solicitud_id === s.id && (!desde || g.created_at > desde) && g.origen !== 'cen');
+      const lista = [...nuevosDocs.map(d => `<li><b>${esc(nombreDoc(d))}</b> · ${fh(d.created_at)}${d.validado === true ? ' <span class="etiqueta verde">correcto</span>' : d.observacion ? ' <span class="etiqueta amarillo">con observación</span>' : d.prevalidacion === 'correcto' ? ' <span class="etiqueta">prerrevisión: correcto</span>' : d.prevalidacion === 'observacion' ? ` <span class="etiqueta amarillo">prerrevisión: observación</span> <span class="tiny muted">${esc(d.prevalidacion_nota || '')}</span>` : ' <span class="etiqueta">sin revisar</span>'}</li>`), ...nuevosMsg.map(g => `<li><b>${g.tipo === 'mensaje' ? 'Mensaje de la persona' : esc(g.tipo)}</b> · ${fh(g.created_at)}: ${esc(g.texto || (g.puntos || []).join(' · '))}</li>`)];
+      return `<tr class="clic" data-id="${s.id}"><td class="small">${fh(s.novedad_at)}</td><td><b>${esc(s.nombre_completo)}</b><br><span class="tiny muted">${esc(s.folio)} · ${esc(s.seccion)}</span></td><td><span class="etiqueta ${s.estado === 'Prevenida' ? 'amarillo' : ''}">${esc(s.estado)}</span>${s.estado === 'Prevenida' && s.limite_subsanacion ? `<br><span class="tiny muted">límite ${fecha(s.limite_subsanacion)}</span>` : ''}${s.documentos_completos ? '<br><span class="tiny" style="color:var(--verde)">expediente completo</span>' : ''}</td><td class="small">${lista.length ? '<ul style="margin:0;padding-left:1.1rem">' + lista.join('') + '</ul>' : '<span class="muted">Sin detalle (marcado como novedad)</span>'}</td><td><a class="btn chico" href="solicitud.html?id=${s.id}">Abrir</a></td></tr>`; }).join('') : '<tr><td colspan="5" class="vacio">No hay novedades: nadie ha subido nada nuevo desde tu última revisión.</td></tr>'}</tbody></table></div>`;
+  $$('#panel tr.clic').forEach(tr => tr.onclick = e => { if (e.target.closest('a')) return; location.href = 'solicitud.html?id=' + tr.dataset.id; });
+}
 $$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); history.replaceState(null, '', '?p=' + b.dataset.p); PANELES[b.dataset.p](); });
 const inicial = param('p') && PANELES[param('p')] ? param('p') : 'solicitudes';
 $$('#pestanas button').forEach(b => b.classList.toggle('activa', b.dataset.p === inicial)); PANELES[inicial]();
