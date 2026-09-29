@@ -145,7 +145,8 @@ export function validarArchivo(f) {
 export function rutaDocumento(slug, folio, tipo, nombre) { return `solicitudes/${slug}/${folio}/${tipo}.${extension(nombre)}`; }
 
 // ===== Correos (textos oficiales AF-04) =====
-export function mailto(para, asunto, cuerpo, cc = CFG.CORREO_COPIA) {
+// Desde el 28-sep-2026 los correos salen del propio buzón enlace@ (Outlook de Manuel): ya no se pone en copia a sí mismo.
+export function mailto(para, asunto, cuerpo, cc = '') {
   const q = new URLSearchParams(); if (cc) q.set('cc', cc); q.set('subject', asunto); q.set('body', cuerpo);
   return `mailto:${para}?${q.toString().replace(/\+/g, '%20')}`;
 }
@@ -165,10 +166,9 @@ export function correoPrevencion(s, faltantes) {
 SU NÚMERO DE REGISTRO (FOLIO) ES: ${s.folio}
 Con ese folio y su correo (${s.correo}) puede consultar su trámite y subir lo que falta en: ${ligaTramite(s)}
 
-Puede enviar lo que falta por cualquiera de estas tres vías, escribiendo siempre su folio ${s.folio}:
+Puede enviar lo que falta por cualquiera de estas dos vías, escribiendo siempre su folio ${s.folio}:
 1. Respondiendo a este correo.
-2. Al correo del sindicato ${CFG.CORREO_COPIA} (va en copia).
-3. Subiéndolo directamente en la plataforma con la liga anterior.
+2. Subiéndolo directamente en la plataforma con la liga anterior.
 
 ${FIRMA}` };
 }
@@ -207,7 +207,7 @@ export function telWa(t) { const d = String(t || '').replace(/\D/g, ''); if (!d)
 export function whatsapp(tel, texto) { return `https://wa.me/${telWa(tel)}?text=${encodeURIComponent(texto)}`; }
 export function ligaTramite(s) { return `${ROOT}estado/?f=${encodeURIComponent(s.folio)}&c=${encodeURIComponent(s.correo || '')}`; }
 export function waAcuse(s) { return `Hola, ${s.nombre_completo.split(' ')[0]}. La Secretaría de Organización del SITAD recibió tu solicitud de afiliación el ${fechaLarga(s.fecha_recepcion)}. Tu folio es *${s.folio}*. Revisamos tu expediente en un máximo de diez días hábiles; si falta algo te lo pedimos una sola vez por este medio. Consulta tu trámite y sube documentos aquí: ${ligaTramite(s)}`; }
-export function waPrevencion(s, faltantes) { return `Hola, ${s.nombre_completo.split(' ')[0]}. Sobre tu solicitud de afiliación al SITAD, folio *${s.folio}*: al revisar tu expediente falta lo siguiente:\n\n${faltantes.map((f, i) => (i + 1) + '. ' + f).join('\n')}\n\nTu número de registro (folio) es *${s.folio}*. Envíalo a más tardar el *${fechaLarga(s.limite_subsanacion)}* por cualquiera de estas vías, siempre con tu folio: 1) respondiendo por aquí, 2) al correo ${CFG.CORREO_COPIA} o a ${CFG.CORREO_ORGANIZACION}, 3) subiéndolo en la plataforma (entra con tu folio y tu correo): ${ligaTramite(s)}
+export function waPrevencion(s, faltantes) { return `Hola, ${s.nombre_completo.split(' ')[0]}. Sobre tu solicitud de afiliación al SITAD, folio *${s.folio}*: al revisar tu expediente falta lo siguiente:\n\n${faltantes.map((f, i) => (i + 1) + '. ' + f).join('\n')}\n\nTu número de registro (folio) es *${s.folio}*. Envíalo a más tardar el *${fechaLarga(s.limite_subsanacion)}* por cualquiera de estas dos vías, siempre con tu folio: 1) respondiendo por aquí, 2) subiéndolo en la plataforma (entra con tu folio y tu correo): ${ligaTramite(s)}
 
 Es la única prevención que se hace; si no se atiende en tiempo, la solicitud se resuelve con lo que obre en el expediente.\n\nSecretaría de Organización · CEN · SITAD`; }
 export function waFavorable(s) { return `Hola, ${s.nombre_completo.split(' ')[0]}. Tu solicitud de afiliación al SITAD (folio *${s.folio}*) fue dictaminada *FAVORABLE* el ${fechaLarga(s.fecha_dictamen || hoy())}, con adscripción a la ${s.seccion}. Se remitió al Secretario General para autorizar tu alta en el Padrón. Te avisamos en cuanto quede registrada. Puedes seguir tu trámite en ${ligaTramite(s)}\n\nSecretaría de Organización · CEN · SITAD`; }
