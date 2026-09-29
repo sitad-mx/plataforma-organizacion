@@ -55,7 +55,10 @@ async function cargar() {
   if (r1.error || !r1.data) { vista.innerHTML = `<div class="aviso error">No se encontró la solicitud.</div>`; return; }
   s = r1.data; docs = r2.data || []; pad = r3.data; correoSG = r4.data && r4.data[0] ? r4.data[0].email : ''; s.documentos = docs; segs = r6.data || []; envios = r7.data || [];
   cfg = Object.fromEntries((r5.data || []).map(x => [x.clave, x.valor]));
+  // Conservar la posición: al marcar correcto / guardar observación la página se vuelve a pintar y NO debe saltar hacia arriba (petición de Manuel)
+  const cols = [...document.querySelectorAll('.ficha > div')].map(c => c.scrollTop); const winY = window.scrollY;
   render();
+  requestAnimationFrame(() => { [...document.querySelectorAll('.ficha > div')].forEach((c, i) => { if (cols[i] != null) c.scrollTop = cols[i]; }); window.scrollTo(0, winY); });
 }
 function render() {
   const cerrada = ['Ejecutada en padrón', 'Dictaminada desfavorable', 'Desistida'].includes(s.estado);
