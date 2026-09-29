@@ -58,7 +58,8 @@ async function cargar() {
   // Conservar la posición: al marcar correcto / guardar observación la página se vuelve a pintar y NO debe saltar hacia arriba (petición de Manuel)
   const cols = [...document.querySelectorAll('.ficha > div')].map(c => c.scrollTop); const winY = window.scrollY;
   render();
-  requestAnimationFrame(() => { [...document.querySelectorAll('.ficha > div')].forEach((c, i) => { if (cols[i] != null) c.scrollTop = cols[i]; }); window.scrollTo(0, winY); });
+  const restaurar = () => { [...document.querySelectorAll('.ficha > div')].forEach((c, i) => { if (cols[i] && c.scrollTop < cols[i]) c.scrollTop = cols[i]; }); if (winY && window.scrollY < winY) window.scrollTo(0, winY); };
+  requestAnimationFrame(restaurar); [80, 250, 600, 1200, 2000].forEach(ms => setTimeout(restaurar, ms)); // los visores (iframes) cargan después y pueden recortar el alto un instante
 }
 function render() {
   const cerrada = ['Ejecutada en padrón', 'Dictaminada desfavorable', 'Desistida'].includes(s.estado);
