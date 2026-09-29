@@ -41,7 +41,7 @@
 <div class="manual" id="manual">
   <div class="membrete"><img src="../assets/sitad-logo-full.png" alt="SITAD"><div><b>Sindicato de Trabajadores Digitales de REEDCAM (SITAD)</b><span>Secretaría de Organización · Comité Ejecutivo Nacional</span><span class="lema">Por un futuro digital, al servicio de México</span></div></div>
   <h1>Manual de la Sección · Plataforma de Organización</h1>
-  <p class="small muted">Cómo revisar y preautorizar las solicitudes de afiliación de tu Sección. Versión 1.2 · 19 de septiembre de 2026 (agrega las asambleas). Este manual se actualiza cada vez que cambia la plataforma; la versión vigente siempre está en <span id="liga-manual"></span>.</p>
+  <p class="small muted">Cómo revisar y preautorizar las solicitudes de afiliación de tu Sección. Versión 1.3 · 28 de septiembre de 2026 (mesa de registro: identificación oficial, gafete a la vista y registro por la lista del padrón; el QR del gafete abre los Documentos Básicos). Este manual se actualiza cada vez que cambia la plataforma; la versión vigente siempre está en <span id="liga-manual"></span>.</p>
 
   <h2>1. Tu papel en cinco líneas</h2>
   <ul>
@@ -133,7 +133,7 @@
 
   <h2>10. Dudas</h2>
   <p>Secretaría de Organización del CEN: <b>sitadorganizacion@gmail.com</b>. Escribe siempre con el folio de la persona.</p>
-  <div class="pie-doc">Manual de la Sección · Plataforma de Organización SITAD · v1.2 (19 de septiembre de 2026) · Secretaría de Organización del Comité Ejecutivo Nacional. Este documento orienta. En caso de duda o diferencia prevalecen la Ley Federal del Trabajo, el Estatuto y las resoluciones válidamente emitidas por los órganos competentes. C. Antonio Ancona No. 1, Interior 3, Col. Cuajimalpa, C.P. 05000, Alcaldía Cuajimalpa de Morelos, Ciudad de México.</div>
+  <div class="pie-doc">Manual de la Sección · Plataforma de Organización SITAD · v1.3 (28 de septiembre de 2026) · Secretaría de Organización del Comité Ejecutivo Nacional. Este documento orienta. En caso de duda o diferencia prevalecen la Ley Federal del Trabajo, el Estatuto y las resoluciones válidamente emitidas por los órganos competentes. C. Antonio Ancona No. 1, Interior 3, Col. Cuajimalpa, C.P. 05000, Alcaldía Cuajimalpa de Morelos, Ciudad de México.</div>
 </div>
 <footer id="pie"></footer>
 <script type="module">
@@ -144,7 +144,7 @@ $('#descargar').onclick = async () => {
   const btn = $('#descargar'); btn.disabled = true; btn.textContent = 'Preparando PDF…';
   try {
     if (!window.html2pdf) await new Promise((ok, no) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'; s.onload = ok; s.onerror = no; document.head.appendChild(s); });
-    await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: 'Manual de la Seccion - Plataforma SITAD v1.2.pdf', image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'letter' }, pagebreak: { mode: ['css', 'legacy'], before: '.salto' } }).from($('#manual')).save();
+    await window.html2pdf().set({ margin: [10, 10, 12, 10], filename: 'Manual de la Seccion - Plataforma SITAD v1.3.pdf', image: { type: 'jpeg', quality: 0.95 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'letter' }, pagebreak: { mode: ['css', 'legacy'], before: '.salto' } }).from($('#manual')).save();
   } catch (e) { toast('No se pudo generar el PDF; usa Imprimir y elige "Guardar como PDF".', 'error'); }
   btn.disabled = false; btn.textContent = '⬇ Descargar PDF';
 };
