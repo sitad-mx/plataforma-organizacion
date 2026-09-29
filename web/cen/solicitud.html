@@ -108,7 +108,8 @@ function render() {
               <span>${x ? `<a href="#" class="btn discreto chico" data-abrir="${x.id}">Abrir en pestaña</a>` : ''}${puedeSubir && abierta ? `<label class="btn discreto chico" style="cursor:pointer">${x ? 'Reemplazar' : 'Subir'}<input type="file" class="oculto" data-subir="${d.tipo}" data-parte="${pt || ''}" accept="application/pdf,image/jpeg,image/png"></label>` : ''}</span></div>
             ${revisaHtml(d.tipo)}
             ${x ? `<div class="visor-cuerpo" data-ver="${x.id}"><span class="cargando" style="color:#ddd">Cargando documento…</span></div>` : ''}
-            ${x && revisa && abierta ? `<div class="visor-pie"><button class="btn ${x.validado ? 'verde' : 'secundario'} chico" data-ok="${x.id}">${x.validado ? '✓ Correcto' : 'Marcar correcto'}</button><textarea data-obs="${x.id}" placeholder="Observación para la persona (qué está mal y cómo debe venir). Se muestra en su consulta y entra en el seguimiento.">${esc(x.observacion || '')}</textarea><button class="btn secundario chico" data-guardar-obs="${x.id}">Guardar observación</button></div>` : x && x.observacion ? `<div class="visor-pie small" style="color:var(--ambar)"><b>Observación:</b> ${esc(x.observacion)}</div>` : ''}
+            ${x && x.prevalidacion ? `<div class="visor-preval ${x.prevalidacion === 'correcto' ? 'ok' : 'obs'}"><b>Prerrevisión (${esc(x.prevalidacion_por || 'Claude')}${x.prevalidacion_at ? ' · ' + fecha(x.prevalidacion_at) : ''}):</b> ${x.prevalidacion === 'correcto' ? '✓ sugiere marcar CORRECTO' : '⚠ sugiere OBSERVACIÓN'}${x.prevalidacion_nota ? ' — ' + esc(x.prevalidacion_nota) : ''} ${x.validado === true ? '<span class="etiqueta verde">confirmado</span>' : (x.validado === false && x.observacion) ? '<span class="etiqueta amarillo">observación guardada</span>' : '<span class="etiqueta">pendiente de tu confirmación</span>'}</div>` : ''}
+            ${x && revisa && abierta ? `<div class="visor-pie"><button class="btn ${x.validado ? 'verde' : 'secundario'} chico" data-ok="${x.id}">${x.validado ? '✓ Correcto' : (x.prevalidacion === 'correcto' ? 'Confirmar: marcar correcto' : 'Marcar correcto')}</button><textarea data-obs="${x.id}" placeholder="Observación para la persona (qué está mal y cómo debe venir). Se muestra en su consulta y entra en el seguimiento.">${esc(x.observacion || (x.prevalidacion === 'observacion' ? x.prevalidacion_nota || '' : ''))}</textarea><button class="btn secundario chico" data-guardar-obs="${x.id}">${!x.observacion && x.prevalidacion === 'observacion' ? 'Confirmar: guardar observación' : 'Guardar observación'}</button></div>` : x && x.observacion ? `<div class="visor-pie small" style="color:var(--ambar)"><b>Observación:</b> ${esc(x.observacion)}</div>` : ''}
           </div>`; }).join('')).join('')}</div>
         ${s.expediente_url ? `<p class="small mt-2">Expediente definitivo en Drive: <a href="${esc(s.expediente_url)}" target="_blank">${esc(s.expediente_url)}</a></p>` : ''}
       </div>
@@ -192,9 +193,24 @@ function render() {
 
 function faltantesGuardados() { const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCION\]/.exec(s.notas || ''); return m ? m[1].trim().split('\n').filter(Boolean) : ['Ver oficio de prevención.']; }
 
+// Resumen de la revisión (para el revisor): qué se le va a pedir a la persona, o "listo para dictamen favorable".
+function resumenRevision() {
+  const req = docsRequeridos(s.actividad_transporte);
+  const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
+  const presente = d => d.partes ? (!!existentes[d.tipo + '|'] || d.partes.every(([pt]) => existentes[d.tipo + '|' + pt])) : !!existentes[d.tipo + '|'];
+  const nombre = d => (DOC_NOMBRE[d.tipo] || d.tipo) + (d.parte ? ' (' + d.parte + ')' : '');
+  const faltan = req.filter(d => !presente(d)).map(d => d.nombre);
+  const conObs = docs.filter(d => d.observacion && d.validado !== true);
+  const sinConfirmar = docs.filter(d => d.validado == null && !d.observacion);
+  if (!faltan.length && !conObs.length && !sinConfirmar.length) return `<div class="aviso ok small"><b>✅ Listo para dictamen favorable.</b> Expediente completo y los ${docs.length} documentos confirmados como correctos.</div>`;
+  if (!faltan.length && !conObs.length) return `<div class="aviso small"><b>Expediente completo; faltan por confirmar ${sinConfirmar.length} documento(s):</b> ${sinConfirmar.map(nombre).map(esc).join(', ')}.${sinConfirmar.some(d => d.prevalidacion === 'correcto') ? ' La prerrevisión sugiere marcarlos correctos: confírmalo arriba en cada uno y quedará listo para dictamen.' : ''}</div>`;
+  const puntos = [...faltan.map(f => `Falta: ${f}`), ...conObs.map(d => `${nombre(d)}: ${d.observacion}`)];
+  return `<div class="aviso atencion small"><b>Se le pedirá a la persona (${puntos.length} punto${puntos.length === 1 ? '' : 's'}):</b><ol style="margin:.3rem 0 0 1.1rem;padding:0">${puntos.map(x => `<li>${esc(x)}</li>`).join('')}</ol>${sinConfirmar.length ? `<span class="tiny muted">Además ${sinConfirmar.length} documento(s) sin confirmar: ${sinConfirmar.map(nombre).map(esc).join(', ')}.</span>` : ''}</div>`;
+}
 function accionesHtml(cerrada) {
   const abierta = ['Recibida', 'Prevenida', 'Subsanada'].includes(s.estado);
-  const pre = s.preautorizada_at ? `<div class="aviso ok small"><b>${s.preautorizada_por ? 'Preautorizada por la Sección' : 'Expediente revisado'}</b> el ${fechaLarga(String(s.preautorizada_at).slice(0, 10))}${s.preautorizacion_nota ? ': ' + esc(s.preautorizacion_nota) : ''}. Lista para dictaminar.</div>` : (abierta ? `<div class="aviso atencion small"><b>Todavía no está lista para dictaminar.</b> Falta completar el expediente o marcarlo como revisado.</div>` : '');
+  const resumen = abierta ? resumenRevision() : '';
+  const pre = resumen + (s.preautorizada_at ? `<div class="aviso ok small"><b>${s.preautorizada_por ? 'Preautorizada por la Sección' : 'Expediente revisado'}</b> el ${fechaLarga(String(s.preautorizada_at).slice(0, 10))}${s.preautorizacion_nota ? ': ' + esc(s.preautorizacion_nota) : ''}. Lista para dictaminar.</div>` : (abierta ? `<div class="aviso atencion small"><b>Todavía no está lista para dictaminar.</b> Falta completar el expediente o marcarlo como revisado.</div>` : ''));
   if (esSecOrg) {
     const b = [];
     if (abierta && !s.preautorizada_at) b.push(`<button class="btn verde" id="a-preautorizar">Preautorizar y enviar al CEN</button><p class="tiny muted">Solo cuando el expediente esté completo, cada documento revisado y sin observaciones pendientes.</p>`);
