@@ -56,35 +56,36 @@ async function solicitudes() {
   const prevenidas = activas.filter(s => s.estado === 'Prevenida');
   const listas = paraCEN.filter(s => s.estado !== 'Prevenida'); // una prevenida espera a la persona: no está lista para dictaminar aunque ya se haya revisado
   const novedades = paraCEN.filter(s => s.con_novedad);
-  $('#resumen').innerHTML = `<b style="color:var(--rojo)">${listas.length} listas para dictaminar</b> · ${prevenidas.length} prevenidas (esperando a la persona) · ${enSeccion.length} con faltantes o sin revisar · ${novedades.length} con novedades · <b style="color:var(--verde)">${porEnviar.length} cartas de aceptación por enviar</b> · <b style="color:var(--ambar)">${porEntregar.length} por atender en oficina</b> · ${activas.filter(s => s.fuera_de_plazo).length} fuera de plazo · ${activas.filter(s => s.estado === 'Enviada al SG').length} con el SG`;
+  const vencidas = activas.filter(s => s.fuera_de_plazo);
+  const enRevision = enSeccion.filter(s => s.estado !== 'Prevenida'); // lo que el CEN tiene que revisar (recibidas o subsanadas); las prevenidas esperan a la persona
+  $('#resumen').innerHTML = `<b style="color:var(--rojo)">${listas.length} por dictaminar</b> · ${novedades.length} con documentos nuevos · ${enRevision.length} en revisión · ${prevenidas.length} prevenidas · <b style="color:var(--verde)">${porEnviar.length} cartas por enviar</b> · <b style="color:var(--ambar)">${porEntregar.length} por atender en oficina</b>${vencidas.length ? ` · <b style="color:var(--rojo)">${vencidas.length} fuera de plazo</b>` : ''}`;
   const favorablesSinEnviar = data.filter(s => s.estado === 'Dictaminada favorable');
   const enviadas = data.filter(s => s.estado === 'Enviada al SG');
   panel.innerHTML = `
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem">
-      <select id="f-alcance"><option value="cen">Listas para dictaminar (expediente completo y revisado)</option><option value="seccional">Con faltantes o sin revisar (todavía no listas)</option><option value="activas">Todo lo en trámite</option><option value="novedades">Con documentos nuevos por revisar</option><option value="prevenidas">Prevenidas (esperando a la persona)</option><option value="vencidas">Fuera de plazo</option><option value="sg">Con el Secretario General</option><option value="enviar">Altas en el Padrón: carta de aceptación por enviar</option><option value="entregar">Por atender en oficina (credencial y papelería)</option><option value="todas">Todas</option></select>
+      <select id="f-alcance" title="De lo más urgente a lo menos"><option value="cen">1. Por dictaminar · expediente completo y revisado (${listas.length})</option><option value="novedades">2. Subieron documentos nuevos · hay que revisarlos (${novedades.length})</option><option value="seccional">3. En revisión · recibidas o subsanadas, sin resolver (${enRevision.length})</option><option value="prevenidas">4. Prevenidas · esperando a la persona (${prevenidas.length})</option><option value="enviar">5. Carta de aceptación por enviar (${porEnviar.length})</option><option value="entregar">6. Por atender en oficina · credencial y papelería (${porEntregar.length})</option><option value="todas">Todas (${data.length})</option></select>
       <select id="f-seccion"><option value="">Todas las secciones</option>${secciones.map(s => `<option>${esc(s)}</option>`).join('')}</select>
       <input type="text" id="f-texto" placeholder="Buscar por folio o nombre" style="max-width:260px">
       <span id="contador" class="etiqueta rojo" style="font-size:.95rem;padding:.35rem .7rem" title="Expedientes que cumplen los filtros de arriba"></span>
       <button class="btn secundario chico" id="excel" title="Descarga en Excel exactamente lo que está en la tabla, con correo, teléfono, plazos y lo que se le pidió a cada persona">⬇ Descargar Excel</button>
-      ${esOrg ? `<a class="btn secundario chico" href="${ROOT}afiliate/" style="margin-left:auto">Registrar solicitud recibida por correo</a>` : ''}
+      ${esOrg ? `<a class="btn secundario chico" href="${ROOT}afiliate/" style="margin-left:auto">Registrar solicitud recibida por correo</a> <a class="btn discreto chico" href="${ROOT}cen/respaldo.html" title="Descarga una copia completa de la base de datos y los expedientes">💾 Respaldo</a>` : ''}
     </div>
     ${novedades.length ? `<div class="aviso small"><b>${novedades.length} solicitud(es) con documentos nuevos</b> desde tu última revisión: ${novedades.slice(0, 6).map(s => `<a href="solicitud.html?id=${s.id}">${esc(s.folio)}</a>`).join(', ')}${novedades.length > 6 ? '…' : ''}.</div>` : ''}
     ${porEnviar.length ? `<div class="aviso ok small"><b>${porEnviar.length} alta(s) en el Padrón con carta de aceptación por enviar:</b> ${porEnviar.slice(0, 6).map(s => `<a href="solicitud.html?id=${s.id}">${esc(s.folio)} · ${esc(s.nombre_completo)}</a>`).join(' · ')}${porEnviar.length > 6 ? '…' : ''}. Abre cada una, envía la carta de aceptación (cita en la oficina de su Sección) con un clic y márcala como enviada.</div>` : ''}
     ${porEntregar.length ? `<div class="aviso atencion small"><b>${porEntregar.length} persona(s) aceptada(s) no han pasado a la oficina de su Sección</b> por su credencial y su número de afiliado (filtro "Por atender en oficina"). La Sección registra la entrega cuando reciba la papelería en original.</div>` : ''}
     ${enviadas.length ? `<div class="aviso atencion small"><b>${enviadas.length} dictamen(es) favorable(s) esperan la autorización del Secretario General.</b> <a href="${mailto(await correoSG(), correoAlSG(enviadas).asunto, correoAlSG(enviadas).cuerpo)}">Recordárselo por correo</a> · <a href="${ROOT}sg/">Ver bandeja de autorizaciones</a></div>` : ''}
     <div class="tabla-envoltura"><table class="tabla"><thead><tr><th></th><th>Folio</th><th>Persona</th><th>Sección</th><th>Recibida</th><th>Etapa</th><th>Estado</th><th>Plazo</th></tr></thead><tbody id="filas"></tbody></table></div>`;
-  $('#f-alcance').value = filtro.alcance; $('#f-seccion').value = filtro.seccion; $('#f-texto').value = filtro.texto;
+  $('#f-alcance').value = filtro.alcance; if (!$('#f-alcance').value) $('#f-alcance').value = 'cen'; // filtros viejos guardados (activas/vencidas/sg) ya no existen
+  $('#f-seccion').value = filtro.seccion; $('#f-texto').value = filtro.texto;
   const pintar = () => {
     filtro = { alcance: $('#f-alcance').value, seccion: $('#f-seccion').value, texto: $('#f-texto').value.toLowerCase() };
     let lista = data;
     if (filtro.alcance === 'activas') lista = activas;
     if (filtro.alcance === 'cen') lista = listas;
-    if (filtro.alcance === 'seccional') lista = enSeccion;
+    if (filtro.alcance === 'seccional') lista = enRevision;
     if (filtro.alcance === 'novedades') lista = novedades;
     if (filtro.alcance === 'revisar') lista = paraCEN.filter(s => ['Recibida', 'Subsanada'].includes(s.estado) && s.documentos_completos);
     if (filtro.alcance === 'prevenidas') lista = prevenidas;
-    if (filtro.alcance === 'vencidas') lista = activas.filter(s => s.fuera_de_plazo);
-    if (filtro.alcance === 'sg') lista = enviadas;
     if (filtro.alcance === 'enviar') lista = porEnviar;
     if (filtro.alcance === 'entregar') lista = porEntregar;
     if (filtro.seccion) lista = lista.filter(s => s.seccion === filtro.seccion);
@@ -105,7 +106,7 @@ async function solicitudes() {
     try { const g = JSON.parse(localStorage.getItem(FILTRO_KEY) || 'null'); if (g && g.ultimo && !pintar.restaurado) { pintar.restaurado = true; const tr = document.querySelector(`#filas tr[data-id="${g.ultimo}"]`); if (tr) { tr.classList.add('ultimo-visto'); requestAnimationFrame(() => { if (g.scroll) window.scrollTo(0, g.scroll); else tr.scrollIntoView({ block: 'center' }); }); } } } catch {}
   };
   ['f-alcance', 'f-seccion'].forEach(id => $('#' + id).onchange = pintar); $('#f-texto').oninput = pintar; pintar();
-  $('#excel').onclick = () => descargarExcelSolicitudes(listaActual, $('#f-alcance').selectedOptions[0].textContent, filtro.seccion);
+  $('#excel').onclick = () => descargarExcelSolicitudes(listaActual, $('#f-alcance').selectedOptions[0].textContent.replace(/^\d\. /, '').replace(/ \(\d+\)$/, ''), filtro.seccion);
 }
 let listaActual = [];
 // Excel de la bandeja con los filtros puestos: para mandarlo a quien no tiene acceso a la plataforma (representantes de cada Sección) y que den seguimiento.
