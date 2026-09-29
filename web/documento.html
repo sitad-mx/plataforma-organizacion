@@ -17,8 +17,9 @@
 <footer id="pie"></footer>
 <script type="module">
 import { sb, $, esc, toast, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, dinero, DOCS, DOC_CORTO, docsRequeridos, ROOT, CFG } from './assets/app.js';
-const tipo = param('tipo'), id = param('id'), f = param('f'), c = param('c'); const doc = $('#doc');
-const publico = ['solicitud', 'cedula'].includes(tipo) && f && c;
+const tipo = param('tipo'), id = param('id'), f = param('f'), c = param('c'), t = param('t'); const doc = $('#doc');
+// Público: la persona descarga sus formatos prellenados (folio + correo) o, ya aceptada, su Constancia y su gafete (clave secreta de su registro)
+const publico = (['solicitud', 'cedula'].includes(tipo) && f && c) || (['constancia', 'gafete'].includes(tipo) && t);
 let p = null;
 if (!publico) { p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas', 'seccion_organizacion', 'seccion_sg']); if (!p) throw new Error('sin acceso'); }
 await armazon({ titulo: 'Documento' });
@@ -34,7 +35,7 @@ $('#descargar').onclick = async () => {
   } catch (e) { toast('No se pudo generar el PDF; usa Imprimir y elige "Guardar como PDF". ' + (e.message || ''), 'error'); }
   btn.disabled = false; btn.textContent = '⬇ Descargar PDF';
 };
-if (publico) {
+if (publico && ['solicitud', 'cedula'].includes(tipo)) {
   $('#instrucciones-firma').classList.remove('oculto');
   $('#instrucciones-firma').innerHTML = `<div class="aviso small"><b>Cómo firmar este documento.</b> 1) Descárgalo o imprímelo. 2) Fírmalo <b>con tinta azul</b>, igual que la firma de tu INE${tipo === 'solicitud' ? ', <b>en los dos lugares</b>: al final de la manifestación (hoja 3) y al final del aviso de privacidad (hoja 4)' : ', al final de la hoja 2'}. 3) Tómale foto o escanéalo y súbelo en "Consultar mi trámite" con tu folio y tu nombre. Sin firma insertada como imagen ni tachaduras.</div>`;
 }
@@ -346,8 +347,10 @@ try {
     else if (tipo === 'cedula') doc.innerHTML = anexo23(s);
     else { const { data: docs } = await sb.from('solicitud_documentos').select('tipo').eq('solicitud_id', s.id); doc.innerHTML = tipo === 'dictamen' ? ft001(s, docs) : ft002(s); }
   } else if (['constancia', 'gafete', 'finanzas', 'credencial'].includes(tipo)) {
-    const [{ data: x }, cfg] = await Promise.all([sb.from('v_padron').select('*').eq('id', id).single(), config()]);
-    if (!x) doc.innerHTML = '<div class="aviso error">No se encontró el registro del padrón.</div>';
+    let x, cfg;
+    if (t) { const { data } = await sb.rpc('padron_publico', { p_token: t }); x = data && data.folio ? data : null; cfg = x ? { liga_documentos_basicos: x.liga_documentos_basicos } : {}; }
+    else { [{ data: x }, cfg] = await Promise.all([sb.from('v_padron').select('*').eq('id', id).single(), config()]); }
+    if (!x) doc.innerHTML = '<div class="aviso error" style="max-width:700px;margin:2rem auto">No se encontró el registro. Si abriste esta liga desde tu carta de aceptación, cópiala completa desde el correo.</div>';
     else if (tipo === 'constancia') doc.innerHTML = anexo15(x, null, cfg);
     else if (tipo === 'gafete') await anexo14(x, cfg);
     else if (tipo === 'finanzas') doc.innerHTML = cartaFinanzas(x, cfg);
