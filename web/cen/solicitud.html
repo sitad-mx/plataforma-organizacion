@@ -118,6 +118,7 @@ function render() {
             <div class="visor-cab"><span class="visor-titulo" title="${x ? esc(x.nombre_archivo || '') + ' · ' + fecha(x.created_at) : ''}"><span class="punto ${x ? (x.validado === false ? 'amarillo' : x.validado ? 'verde' : 'azul') : 'rojo'}"></span><b>${titulo}</b>${x ? '' : ' <span class="tiny rojo">Falta</span>'}</span>
               <span>${x ? `<button type="button" class="btn discreto chico" data-vista="Fit">Página completa</button><button type="button" class="btn discreto chico" data-vista="FitH">Ancho</button><a href="#" class="btn discreto chico" data-abrir="${x.id}">Abrir en pestaña</a>` : ''}${puedeSubir && abierta ? `<label class="btn discreto chico" style="cursor:pointer">${x ? 'Reemplazar' : 'Subir'}<input type="file" class="oculto" data-subir="${d.tipo}" data-parte="${pt || ''}" accept="application/pdf,image/jpeg,image/png"></label>` : ''}</span></div>
             ${revisaHtml(d.tipo)}
+            ${(() => { if (!x) return ''; const ant = docs.filter(o => o.id !== x.id && o.tipo === x.tipo && (o.parte || '') === (x.parte || '') && String(o.created_at) < String(x.created_at)); return ant.length ? `<div class="visor-preval"><b>Versión ${ant.length + 1} (subsanación ${fecha(x.created_at)}):</b> sustituye a ${ant.length === 1 ? 'la versión anterior' : ant.length + ' versiones anteriores'}${ant.some(o => o.observacion) ? ' que tenía observación (' + esc(ant.filter(o => o.observacion).map(o => o.observacion).join(' · ')) + ')' : ''}. La anterior queda como historial y ya no cuenta para pedir ni dictaminar.</div>` : ''; })()}
             ${x && !x.prevalidacion && x.prevalidacion_nota ? `<div class="visor-preval"><b>Prerrevisión:</b> pendiente — ${esc(x.prevalidacion_nota)}</div>` : ''}
             ${x && x.prevalidacion ? `<div class="visor-preval ${x.prevalidacion === 'correcto' ? 'ok' : 'obs'}"><b>Prerrevisión${x.prevalidacion_at ? ' ' + fecha(x.prevalidacion_at) : ''}:</b> ${x.prevalidacion === 'correcto' ? '✓ sugiere CORRECTO' : '⚠ sugiere OBSERVACIÓN'} ${x.validado === true ? '<span class="etiqueta verde">confirmado</span>' : (x.validado === false && x.observacion) ? '<span class="etiqueta amarillo">observación guardada</span>' : '<span class="etiqueta">pendiente de tu confirmación</span>'}${x.prevalidacion_nota ? ` <details style="display:inline"><summary style="display:inline;cursor:pointer;color:var(--rojo)">ver nota</summary> ${esc(x.prevalidacion_nota)}</details>` : ''}</div>` : ''}
             ${x ? `<div class="visor-cuerpo" data-ver="${x.id}"><span class="cargando" style="color:#ddd">Cargando documento…</span></div>` : '<div class="visor-cuerpo"><span class="small" style="color:#ddd">No se ha recibido este documento.</span></div>'}
@@ -207,15 +208,17 @@ function faltantesGuardados() { const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCIO
 
 // Resumen de la revisión (para el revisor): qué se le va a pedir a la persona, o "listo para dictamen favorable".
 function nombreDoc(d) { return (DOC_NOMBRE[d.tipo] || d.tipo) + (d.parte ? ' (' + d.parte + ')' : ''); }
+// Documentos vigentes: si la persona subsanó, la versión nueva (p. ej. solicitud-v2.pdf) sustituye a la anterior; la vieja queda como historial y NO cuenta para pedir, confirmar ni dictaminar
+function docsVigentes() { const m = {}; docs.forEach(d => { const k = d.tipo + '|' + (d.parte || ''); if (!m[k] || String(d.created_at) >= String(m[k].created_at)) m[k] = d; }); return Object.values(m); }
 function pendientesRevision() {
-  const req = docsRequeridos(s.actividad_transporte);
-  const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
+  const req = docsRequeridos(s.actividad_transporte); const vig = docsVigentes();
+  const existentes = {}; vig.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
   const presente = d => d.partes ? (!!existentes[d.tipo + '|'] || d.partes.every(([pt]) => existentes[d.tipo + '|' + pt])) : !!existentes[d.tipo + '|'];
-  return { faltan: req.filter(d => !presente(d)).map(d => d.nombre), conObs: docs.filter(d => d.observacion && d.validado !== true), sinConfirmar: docs.filter(d => d.validado == null && !d.observacion) };
+  return { faltan: req.filter(d => !presente(d)).map(d => d.nombre), conObs: vig.filter(d => d.observacion && d.validado !== true), sinConfirmar: vig.filter(d => d.validado == null && !d.observacion) };
 }
 function resumenRevision() {
   const nombre = nombreDoc; const { faltan, conObs, sinConfirmar } = pendientesRevision();
-  if (!faltan.length && !conObs.length && !sinConfirmar.length) return `<div class="aviso ok small"><b>✅ Listo para dictamen favorable.</b> Expediente completo y los ${docs.length} documentos confirmados como correctos. Ya aparece en la bandeja como "lista para dictaminar".</div>`;
+  if (!faltan.length && !conObs.length && !sinConfirmar.length) return `<div class="aviso ok small"><b>✅ Listo para dictamen favorable.</b> Expediente completo y los ${docsVigentes().length} documentos vigentes confirmados como correctos. Ya aparece en la bandeja como "lista para dictaminar".</div>`;
   if (!faltan.length && !conObs.length) return `<div class="aviso small"><b>Expediente completo; faltan por confirmar ${sinConfirmar.length} documento(s):</b> ${sinConfirmar.map(nombre).map(esc).join(', ')}.${sinConfirmar.some(d => d.prevalidacion === 'correcto') ? ' La prerrevisión sugiere marcarlos correctos: confírmalo arriba en cada uno y quedará listo para dictamen.' : ''}</div>`;
   const puntos = [...faltan.map(f => `Falta: ${f}`), ...conObs.map(d => `${nombre(d)}: ${d.observacion}`)];
   return `<div class="aviso atencion small"><b>Se le pedirá a la persona (${puntos.length} punto${puntos.length === 1 ? '' : 's'}):</b><ol style="margin:.3rem 0 0 1.1rem;padding:0">${puntos.map(x => `<li>${esc(x)}</li>`).join('')}</ol>${sinConfirmar.length ? `<span class="tiny muted">Además ${sinConfirmar.length} documento(s) sin confirmar: ${sinConfirmar.map(nombre).map(esc).join(', ')}.</span>` : ''}</div>`;
@@ -303,10 +306,10 @@ async function actualizar(cambios, msg, abrirSG) {
   if (abrirSG) window.open(mailto(correoSG, correoAlSG([s]).asunto, correoAlSG([s]).cuerpo), '_blank');
 }
 function puntosSugeridos(req) {
-  const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
+  const vig = docsVigentes(); const existentes = {}; vig.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
   const faltan = [];
   for (const d of req) { if (d.partes && !existentes[d.tipo + '|']) { for (const [pt, n] of d.partes) if (!existentes[d.tipo + '|' + pt]) faltan.push(`${d.nombre}: falta ${n.toLowerCase()}`); } else if (!existentes[d.tipo + '|']) faltan.push(d.nombre); }
-  const conObs = docs.filter(d => d.observacion && d.validado !== true).map(d => `${DOC_NOMBRE[d.tipo] || d.tipo}${d.parte ? ' (' + d.parte + ')' : ''}: ${d.observacion}`);
+  const conObs = vig.filter(d => d.observacion && d.validado !== true).map(d => `${DOC_NOMBRE[d.tipo] || d.tipo}${d.parte ? ' (' + d.parte + ')' : ''}: ${d.observacion}`);
   return [...faltan.map(f => `Falta: ${f}; súbalo por el medio institucional indicando su folio.`), ...conObs];
 }
 async function prevenir(req) {
