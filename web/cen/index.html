@@ -38,7 +38,11 @@ const inicial = param('p') && PANELES[param('p')] ? param('p') : 'solicitudes';
 $$('#pestanas button').forEach(b => b.classList.toggle('activa', b.dataset.p === inicial)); PANELES[inicial]();
 
 // ===== Solicitudes =====
+// Los filtros y la posición se recuerdan en este navegador: al volver de una ficha la bandeja queda como se dejó (petición de Manuel 28-sep)
+const FILTRO_KEY = 'cen_bandeja_filtro';
 let filtro = { alcance: 'cen', texto: '', seccion: '' };
+try { const g = JSON.parse(localStorage.getItem(FILTRO_KEY) || 'null'); if (g && g.alcance) filtro = { alcance: g.alcance, texto: g.texto || '', seccion: g.seccion || '' }; } catch {}
+function recordarFiltro(extra) { try { const prev = JSON.parse(localStorage.getItem(FILTRO_KEY) || '{}'); localStorage.setItem(FILTRO_KEY, JSON.stringify({ ultimo: prev.ultimo, scroll: prev.scroll, ...filtro, ...extra })); } catch {} }
 const ETAPA_TXT = { 'Revisión seccional': 'Sin revisar / con faltantes', 'Lista para el CEN': 'Lista para dictaminar' };
 async function solicitudes() {
   panel.innerHTML = '<p class="cargando">Cargando solicitudes…</p>';
@@ -95,7 +99,10 @@ async function solicitudes() {
       <td><span class="etiqueta ${s.etapa === 'Lista para el CEN' ? 'rojo' : s.etapa === 'Revisión seccional' ? '' : s.etapa === 'Concluida' ? 'carbon' : 'azul'}">${esc(ETAPA_TXT[s.etapa] || s.etapa)}</span></td>
       <td><span class="etiqueta ${(ESTADO_INFO[s.estado] || {}).etiqueta || ''}">${esc(s.estado)}</span></td>
       <td>${plazo(s)}</td></tr>`).join('') : '<tr><td colspan="8" class="vacio">No hay solicitudes con ese filtro.</td></tr>';
-    $$('#filas tr.clic').forEach(tr => tr.onclick = () => location.href = 'solicitud.html?id=' + tr.dataset.id);
+    $$('#filas tr.clic').forEach(tr => tr.onclick = () => { recordarFiltro({ ultimo: tr.dataset.id, scroll: window.scrollY }); location.href = 'solicitud.html?id=' + tr.dataset.id; });
+    recordarFiltro();
+    // Al volver de una ficha: resaltar el expediente que se abrió y regresar a donde estaba la lista
+    try { const g = JSON.parse(localStorage.getItem(FILTRO_KEY) || 'null'); if (g && g.ultimo && !pintar.restaurado) { pintar.restaurado = true; const tr = document.querySelector(`#filas tr[data-id="${g.ultimo}"]`); if (tr) { tr.classList.add('ultimo-visto'); requestAnimationFrame(() => { if (g.scroll) window.scrollTo(0, g.scroll); else tr.scrollIntoView({ block: 'center' }); }); } } } catch {}
   };
   ['f-alcance', 'f-seccion'].forEach(id => $('#' + id).onchange = pintar); $('#f-texto').oninput = pintar; pintar();
   $('#excel').onclick = () => descargarExcelSolicitudes(listaActual, $('#f-alcance').selectedOptions[0].textContent, filtro.seccion);

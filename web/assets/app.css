@@ -309,3 +309,6 @@ dl.datos dd { margin: 0; }
 .envio { display: flex; gap: .4rem .5rem; align-items: center; flex-wrap: wrap; padding: .5rem 0; border-bottom: 1px solid var(--linea-suave); }
 .envio > span { flex: 1 1 100%; }
 .envio > .btn { flex: 0 0 auto; min-width: 7.5rem; justify-content: center; }
+
+/* Bandeja del CEN: expediente del que se acaba de volver */
+.tabla tr.ultimo-visto td { background: #fff5d6; box-shadow: inset 3px 0 0 var(--rojo); }
