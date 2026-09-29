@@ -194,7 +194,7 @@ function render() {
 function faltantesGuardados() { const m = /\[PREVENCION\]([\s\S]*?)\[\/PREVENCION\]/.exec(s.notas || ''); return m ? m[1].trim().split('\n').filter(Boolean) : ['Ver oficio de prevención.']; }
 
 // Resumen de la revisión (para el revisor): qué se le va a pedir a la persona, o "listo para dictamen favorable".
-const nombreDoc = d => (DOC_NOMBRE[d.tipo] || d.tipo) + (d.parte ? ' (' + d.parte + ')' : '');
+function nombreDoc(d) { return (DOC_NOMBRE[d.tipo] || d.tipo) + (d.parte ? ' (' + d.parte + ')' : ''); }
 function pendientesRevision() {
   const req = docsRequeridos(s.actividad_transporte);
   const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
