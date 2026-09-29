@@ -159,7 +159,8 @@ table.tabla td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ===== Ficha (dos columnas) ===== */
 .ficha { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-@media (min-width: 900px) { .ficha { grid-template-columns: 1.6fr 1fr; align-items: start; } .ficha .lateral { position: sticky; top: 1rem; } }
+/* En pantalla ancha las dos columnas de la ficha se desplazan por separado (petición de Manuel 28-sep) */
+@media (min-width: 900px) { .ficha { grid-template-columns: 1.6fr 1fr; align-items: stretch; position: sticky; top: .5rem; height: calc(100vh - 1rem); } .ficha > div { overflow-y: auto; max-height: 100%; padding-right: .35rem; scrollbar-width: thin; } .ficha .lateral { position: static; } }
 dl.datos { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 0; }
 dl.datos dt { color: var(--apoyo); font-size: .85rem; }
 dl.datos dd { margin: 0; }
@@ -304,5 +305,7 @@ dl.datos dd { margin: 0; }
 .btn.wa:hover { background: #1ebe5a; }
 .etiqueta.novedad { background: #FFE8A3; color: #6B4E00; }
 @media (max-width: 600px) { .doc-tarjeta { padding: .75rem; } .ranura-botones .btn { flex: 1 1 45%; justify-content: center; } }
-.envio { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; padding: .45rem 0; border-bottom: 1px solid var(--linea-suave); }
-.envio > span { flex: 1 1 160px; }
+/* Cada paso: título y estado en un renglón; los dos botones siempre juntos en el siguiente, alineados igual en todos los pasos */
+.envio { display: flex; gap: .4rem .5rem; align-items: center; flex-wrap: wrap; padding: .5rem 0; border-bottom: 1px solid var(--linea-suave); }
+.envio > span { flex: 1 1 100%; }
+.envio > .btn { flex: 0 0 auto; min-width: 7.5rem; justify-content: center; }

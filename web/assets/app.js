@@ -146,8 +146,26 @@ export function rutaDocumento(slug, folio, tipo, nombre) { return `solicitudes/$
 
 // ===== Correos (textos oficiales AF-04) =====
 // Desde el 28-sep-2026 los correos salen del propio buzón enlace@ (Outlook de Manuel): ya no se pone en copia a sí mismo.
+// Aire en los correos (petición de Manuel 28-sep): cada liga va sola en su renglón, con línea en blanco antes y después y sin puntuación pegada,
+// para que Outlook la reconozca como liga y la persona no tenga que copiarla; los párrafos quedan separados por línea en blanco.
+export function airear(texto) {
+  return String(texto || '')
+    .replace(/[ \t]*(https?:\/\/[^\s]+?)[.,;:)\]]*(?=\s|$)/g, (m, u) => '\n' + u + '\n')
+    .replace(/\n(https?:\/\/[^\n]+)\n/g, '\n\n$1\n\n')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+// El mismo texto como HTML (párrafos con espacio y ligas clicables), para pegarlo en Outlook con "Copiar con formato"
+export function textoAHtml(texto) {
+  const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return airear(texto).split(/\n{2,}/).map(par => '<p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:11pt;line-height:1.45">' + e(par).replace(/\n/g, '<br>').replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>') + '</p>').join('');
+}
+export async function copiarHtml(texto) {
+  const html = textoAHtml(texto), plano = airear(texto);
+  if (navigator.clipboard && window.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([plano], { type: 'text/plain' }) })]);
+  else await navigator.clipboard.writeText(plano);
+}
 export function mailto(para, asunto, cuerpo, cc = '') {
-  const q = new URLSearchParams(); if (cc) q.set('cc', cc); q.set('subject', asunto); q.set('body', cuerpo);
+  const q = new URLSearchParams(); if (cc) q.set('cc', cc); q.set('subject', asunto); q.set('body', airear(cuerpo));
   return `mailto:${para}?${q.toString().replace(/\+/g, '%20')}`;
 }
 const FIRMA = `Secretaría de Organización · Comité Ejecutivo Nacional · ${CFG.SINDICATO}`;
