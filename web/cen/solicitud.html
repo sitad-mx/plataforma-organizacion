@@ -69,7 +69,9 @@ function render() {
   const req = docsRequeridos(s.actividad_transporte);
   const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
   const presente = d => d.partes ? (!!existentes[d.tipo + '|'] || d.partes.every(([pt]) => existentes[d.tipo + '|' + pt])) : !!existentes[d.tipo + '|'];
-  const fichasDoc = req.flatMap(d => (d.partes && !existentes[d.tipo + '|'] ? d.partes : [[null, d.partes ? 'ambos lados en un archivo' : null]]).map(([pt, nombrePt]) => ({ d, pt, nombrePt, x: existentes[d.tipo + '|' + (pt || '')], clave: d.tipo + '|' + (pt || '') })));
+  // Documentos adicionales que la persona mandó sin ser requeridos (p. ej. licencia sin ser transporte): también se muestran y se confirman
+  const extras = docs.filter(x => !req.some(d => d.tipo === x.tipo)).map(x => ({ tipo: x.tipo, nombre: (DOC_NOMBRE[x.tipo] || x.tipo) + ' (adicional)', corto: (DOC_CORTO[x.tipo] || x.tipo) + ' · adicional', partes: null }));
+  const fichasDoc = [...req, ...extras.filter((e, i, a) => a.findIndex(y => y.tipo === e.tipo) === i)].flatMap(d => (d.partes && !existentes[d.tipo + '|'] ? d.partes : [[null, d.partes ? 'ambos lados en un archivo' : null]]).map(([pt, nombrePt]) => ({ d, pt, nombrePt, x: existentes[d.tipo + '|' + (pt || '')], clave: d.tipo + '|' + (pt || '') })));
   if (!fichasDoc.some(f => f.clave === docActivo)) docActivo = (fichasDoc.find(f => f.x) || fichasDoc[0] || {}).clave || null;
   const resumen = req.map(d => { const partes = d.partes && !existentes[d.tipo + '|'] ? d.partes.map(([pt, n]) => [existentes[d.tipo + '|' + pt], n]) : [[existentes[d.tipo + '|'], null]];
     return partes.map(([x, n]) => { const nombre = d.corto + (n ? ' · ' + n.toLowerCase() : '');
