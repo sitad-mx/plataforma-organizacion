@@ -363,8 +363,10 @@ try {
     else if (tipo === 'asistencia') doc.innerHTML = listaAsistenciaAS05(d.a, d.pad, d.asis);
     else doc.innerHTML = computoAS06(d.a, d.q, d.verifs);
   } else if (tipo === 'comprobante') {
-    const [{ data: pg }, cfg] = await Promise.all([sb.from('v_pagos').select('*').eq('id', id).single(), config()]);
-    doc.innerHTML = pg ? comprobantePago(pg, cfg) : '<div class="aviso error">No se encontró el pago.</div>';
+    let pg, cfg;
+    if (t) { const { data } = await sb.rpc('recibo_publico', { p_token: t }); pg = data && data.id ? data : null; cfg = pg ? { finanzas_titular: pg.finanzas_titular } : {}; }
+    else [{ data: pg }, cfg] = await Promise.all([sb.from('v_pagos').select('*').eq('id', id).single(), config()]);
+    doc.innerHTML = pg ? comprobantePago(pg, cfg) : '<div class="aviso error" style="max-width:700px;margin:2rem auto">No se encontró el comprobante. Si abriste esta liga desde tu correo o WhatsApp, cópiala completa; el comprobante solo existe para pagos ya verificados por Finanzas.</div>';
   } else doc.innerHTML = '<div class="aviso error">Tipo de documento no válido.</div>';
 } catch (e) { doc.innerHTML = `<div class="aviso error" style="max-width:700px;margin:2rem auto">No se pudo preparar el documento: ${esc(e.message || e)}</div>`; }
 </script>

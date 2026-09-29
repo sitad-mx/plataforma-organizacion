@@ -8,6 +8,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/app.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  .fin-barra { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-bottom: .8rem; }
+  .fin-barra input[type=month] { font: inherit; padding: .35rem .5rem; }
+  .fin-resumen { display: flex; gap: .5rem 1.2rem; flex-wrap: wrap; font-size: .9rem; margin-bottom: .8rem; }
+  .fin-resumen b { font-size: 1.2rem; }
+  .fin-acciones { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
+  .fin-acciones .btn { min-width: 0; }
+  table.tabla td { vertical-align: top; }
+</style>
 </head>
 <body>
 <header id="cabecera"></header>
@@ -16,86 +26,175 @@
     <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Comité Ejecutivo Nacional</p><h1>Secretaría de Finanzas · Cuotas</h1></div>
     <div id="resumen" class="small muted"></div>
   </div>
-  <div class="pestanas" id="pestanas"><button data-p="cobranza" class="activa">Afiliados y cobranza</button><button data-p="pendientes">Pagos por verificar</button><button data-p="historial">Padrón financiero</button><button data-p="nuevo">Registrar pago recibido por correo</button></div>
+  <div class="pestanas" id="pestanas"><button data-p="mes" class="activa">Cobranza del mes</button><button data-p="pendientes">Pagos por verificar</button><button data-p="historial">Padrón financiero</button><button data-p="bienvenida">Carta de bienvenida (AF-09)</button><button data-p="nuevo">Registrar pago recibido por correo</button></div>
   <section id="panel"><p class="cargando">Cargando…</p></section>
 </main>
 <footer id="pie"></footer>
 <script type="module">
-import { sb, $, $$, esc, toast, ocupado, armazon, requerirRol, fecha, fechaLarga, hoy, dinero, urlFirmada, subirArchivo, validarArchivo, mailto, whatsapp, correoFinanzas, ROOT, CFG } from '../assets/app.js';
+import { sb, $, $$, esc, toast, ocupado, armazon, requerirRol, fecha, fechaLarga, hoy, dinero, urlFirmada, subirArchivo, validarArchivo, mailto, whatsapp, correoFinanzas, correoRequisicion, waRequisicion, correoRecibo, waRecibo, ligaRecibo, mesTexto, copiarHtml, ROOT, CFG } from '../assets/app.js';
 const p = await requerirRol(['finanzas', 'cen_organizacion', 'cen_lectura', 'sg']); if (!p) throw new Error('sin acceso');
 await armazon({ titulo: 'Secretaría de Finanzas', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }, { href: ROOT + 'finanzas/', texto: 'Finanzas', id: 'finanzas' }], activa: 'finanzas' });
-const puede = ['finanzas', 'cen_organizacion'].includes(p.rol); const panel = $('#panel');
+const puede = ['finanzas', 'cen_organizacion'].includes(p.rol); const panel = $('#panel'); const quien = p.nombre || p.email;
 const { data: cfgRows } = await sb.from('configuracion').select('clave, valor'); const cfg = Object.fromEntries((cfgRows || []).map(x => [x.clave, x.valor]));
-const P = { cobranza, pendientes, historial, nuevo };
+const P = { mes, pendientes, historial, bienvenida, nuevo };
 $$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); P[b.dataset.p](); });
-cobranza();
+const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch {} }; const leer = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
+const fh = d => d ? fecha(String(d).slice(0, 10)) + ' ' + String(d).slice(11, 16) : '';
+const medioTxt = m => m === 'whatsapp' ? 'WhatsApp' : m === 'correo' ? 'correo' : (m || '');
+const botones = (tel, correo, asunto, cuerpo, wa, envio, etiqueta) => `<span class="fin-acciones"><a class="btn wa chico" href="${whatsapp(tel, wa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''} data-envio="${envio}|whatsapp">${etiqueta ? etiqueta + ' · ' : ''}WhatsApp</a><a class="btn secundario chico" href="${mailto(correo, asunto, cuerpo)}" ${!correo ? 'style="opacity:.5;pointer-events:none"' : ''} data-envio="${envio}|correo">Correo</a><button type="button" class="btn discreto chico" data-copiar-html="${encodeURIComponent(cuerpo)}" title="Copia el texto con párrafos y ligas clicables para pegarlo en Outlook">📋</button></span>`;
+function enlazarCopiar() { $$('[data-copiar-html]').forEach(b => b.onclick = async () => { try { await copiarHtml(decodeURIComponent(b.dataset.copiarHtml)); toast('Texto copiado con formato: pégalo en el correo.', 'ok'); } catch (e) { toast('No se pudo copiar: ' + e.message, 'error'); } }); }
+async function registrarEnvio(afiliadoId, ym, paso, medio, pagoId) {
+  const { error } = await sb.from('cuota_envios').insert({ afiliado_id: afiliadoId, periodo_mes: ym + '-01', paso, medio, pago_id: pagoId || null, enviado_por_nombre: quien });
+  if (error) toast('No se registró el envío: ' + error.message, 'error'); return !error;
+}
 
-async function cobranza() {
+// ===================== Cobranza del mes =====================
+let M = { ym: leer('fin_mes', hoy().slice(0, 7)), filtro: leer('fin_filtro', 'todos'), texto: '', datos: [] };
+function estadoMes(x) {
+  if (x.pago_estado === 'Verificado') return 'pagado';
+  if (x.pago_estado === 'Recibido') return 'verificar';
+  if (x.pago_estado === 'Rechazado') return 'rechazado';
+  return x.requisicion_at ? 'pedido' : 'sin';
+}
+const ETIQUETA = { pagado: ['verde', 'Pagado'], verificar: ['amarillo', 'Comprobante recibido · por verificar'], rechazado: ['rojo', 'Comprobante rechazado'], pedido: ['', 'Pedido · sin comprobante'], sin: ['', 'Sin pago'] };
+async function mes() {
+  panel.innerHTML = `<p class="small muted">Elige el mes. Por cada afiliado(a) activo(a) ves si ya pagó ese mes, si su comprobante está por verificar o si hay que pedirle el pago. Los botones de WhatsApp y correo abren el mensaje ya redactado (cuenta, monto, concepto y liga para subir el comprobante) y <b>registran el envío</b> (quién, cuándo, por qué medio).</p>
+    <div class="fin-barra"><label class="small" for="m-mes"><b>Mes</b></label><input type="month" id="m-mes" value="${M.ym}"><select id="m-filtro"><option value="todos">Todos los activos</option><option value="sin">Sin pago · hay que pedirlo</option><option value="pedido">Ya pedido · sin comprobante</option><option value="verificar">Comprobante por verificar</option><option value="pagado">Pagados</option><option value="sinrecibo">Pagados sin recibo enviado</option></select><input type="text" id="m-texto" placeholder="Buscar por nombre, número o sección" style="max-width:280px"><button class="btn secundario chico" id="m-excel" style="margin-left:auto">⬇ Excel del mes</button></div>
+    <div class="fin-resumen" id="m-resumen"></div>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Persona</th><th>Sección</th><th>Estado del mes</th><th>Acciones</th></tr></thead><tbody id="m-filas"><tr><td colspan="5" class="cargando">Cargando…</td></tr></tbody></table></div>
+    <p class="tiny muted mt-1">Un afiliado aparece "pagado" cuando Finanzas verificó un comprobante de ese mes. El recibo (comprobante de cuota con folio) se genera solo al verificar; con "Enviar recibo" se lo mandas con su liga.</p>`;
+  $('#m-filtro').value = M.filtro;
+  $('#m-mes').onchange = e => { M.ym = e.target.value || hoy().slice(0, 7); guardar('fin_mes', M.ym); cargarMes(); };
+  $('#m-filtro').onchange = e => { M.filtro = e.target.value; guardar('fin_filtro', M.filtro); pintarMes(); };
+  $('#m-texto').oninput = e => { M.texto = e.target.value.toLowerCase(); pintarMes(); };
+  $('#m-excel').onclick = excelMes;
+  await cargarMes();
+}
+async function cargarMes() {
+  const { data, error } = await sb.rpc('cobranza_mes', { p_mes: M.ym + '-01' });
+  if (error) { $('#m-filas').innerHTML = `<tr><td colspan="5"><div class="aviso error">${esc(error.message)}</div></td></tr>`; return; }
+  M.datos = data || []; pintarMes();
+}
+function filtrarMes() {
+  return M.datos.filter(x => { const e = estadoMes(x); if (M.filtro === 'sinrecibo') return e === 'pagado' && !x.recibo_at; if (M.filtro !== 'todos' && e !== M.filtro) return false; return !M.texto || [x.nombre_completo, x.numero_afiliacion, x.seccion, x.correo, x.telefono].join(' ').toLowerCase().includes(M.texto); });
+}
+function pintarMes() {
+  const n = e => M.datos.filter(x => estadoMes(x) === e).length;
+  $('#m-resumen').innerHTML = `<span><b>${M.datos.length}</b> activos</span><span style="color:var(--verde)"><b>${n('pagado')}</b> pagados</span><span style="color:var(--ambar)"><b>${n('verificar')}</b> por verificar</span><span><b>${n('pedido')}</b> pedidos sin comprobante</span><span style="color:var(--rojo)"><b>${n('sin') + n('rechazado')}</b> sin pago</span><span class="muted">· ${mesTexto(M.ym)}</span>`;
+  $('#resumen').textContent = `${mesTexto(M.ym)}: ${n('pagado')} de ${M.datos.length} pagados`;
+  const l = filtrarMes();
+  $('#m-filas').innerHTML = l.length ? l.map(x => {
+    const e = estadoMes(x); const [color, texto] = ETIQUETA[e]; const ym = M.ym;
+    let estado = `<span class="etiqueta ${color}">${texto}</span>`;
+    if (e === 'pagado') estado += `<br><span class="tiny muted">${esc(x.comprobante_folio || '')} · ${dinero(x.monto)} · operación ${fecha(x.fecha_operacion)}</span>${x.recibo_at ? `<br><span class="tiny" style="color:var(--verde)">✓ recibo enviado ${fh(x.recibo_at)} por ${medioTxt(x.recibo_medio)}</span>` : '<br><span class="tiny" style="color:var(--ambar)">recibo sin enviar</span>'}`;
+    if (e === 'verificar') estado += `<br><span class="tiny muted">${dinero(x.monto)} · operación ${fecha(x.fecha_operacion)} · "${esc(x.pago_periodo || '')}"</span>`;
+    if (e === 'rechazado') estado += `<br><span class="tiny" style="color:var(--rojo)">${esc(x.pago_observacion || '')}</span>`;
+    if (x.requisicion_at && e !== 'pagado') estado += `<br><span class="tiny muted">pedido ${fh(x.requisicion_at)} por ${medioTxt(x.requisicion_medio)}${x.requisiciones > 1 ? ' (' + x.requisiciones + ' veces)' : ''}${x.requisicion_por ? ' · ' + esc(x.requisicion_por) : ''}</span>`;
+    let acciones = '';
+    if (!puede) acciones = '<span class="tiny muted">solo lectura</span>';
+    else if (e === 'pagado') { const pg = { ...x, id: x.pago_id, nombre: x.nombre_completo, afiliado_nombre: x.nombre_completo, periodo: x.pago_periodo || mesTexto(ym) }; const c = correoRecibo(pg, cfg); acciones = botones(x.telefono, x.correo, c.asunto, c.cuerpo, waRecibo(pg, cfg), `recibo|${x.id}|${x.pago_id}`, 'Enviar recibo') + ` <a class="btn discreto chico" href="${ligaRecibo(pg)}" target="_blank">Recibo</a>`; }
+    else if (e === 'verificar') acciones = `<span class="fin-acciones"><button class="btn chico verde" data-ok="${x.pago_id}">Verificar</button><a href="#" class="btn discreto chico" data-ver="${x.pago_id}|${esc(x.comprobante_url || '')}">Comprobante bancario</a><button class="btn discreto chico" data-no="${x.pago_id}">Rechazar</button></span>`;
+    else { const rec = !!x.requisicion_at; const c = correoRequisicion(x, cfg, ym, rec); acciones = botones(x.telefono, x.correo, c.asunto, c.cuerpo, waRequisicion(x, cfg, ym, rec), `${rec ? 'recordatorio' : 'requisicion'}|${x.id}|`, rec ? 'Recordar' : 'Pedir pago'); }
+    return `<tr><td class="num">${x.numero_afiliacion}</td><td><b>${esc(x.nombre_completo)}</b><br><span class="tiny muted">📱 ${esc(x.telefono || '—')} · ${esc(x.correo || '—')}</span>${x.pagos_verificados ? `<br><span class="tiny muted">${x.pagos_verificados} pago(s) verificado(s) · último ${fecha(x.ultimo_pago)}</span>` : '<br><span class="tiny muted">sin pagos verificados</span>'}</td><td>${esc(x.seccion)}<br><span class="tiny muted">alta ${fecha(x.fecha_alta)}</span></td><td>${estado}</td><td>${acciones}</td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="vacio">Nadie en este filtro.</td></tr>';
+  enlazarCopiar();
+  $$('#m-filas [data-envio]').forEach(a => a.addEventListener('click', async () => {
+    const [paso, afiliadoId, pagoId, medio] = (() => { const [envio, medio] = a.dataset.envio.split('|').length === 4 ? [a.dataset.envio.split('|').slice(0, 3).join('|'), a.dataset.envio.split('|')[3]] : [a.dataset.envio, '']; const [paso, af, pg] = envio.split('|'); return [paso, af, pg, medio]; })();
+    if (!await registrarEnvio(afiliadoId, M.ym, paso, medio, pagoId)) return;
+    const x = M.datos.find(y => y.id === afiliadoId); const ahora = new Date().toISOString();
+    if (x) { if (paso === 'recibo') { x.recibo_at = ahora; x.recibo_medio = medio; } else { x.requisicion_at = ahora; x.requisicion_medio = medio; x.requisicion_por = quien; x.requisiciones = (x.requisiciones || 0) + 1; } }
+    toast('Envío registrado.', 'ok'); pintarMes();
+  }));
+  $$('#m-filas [data-ok]').forEach(b => b.onclick = async () => { ocupado(b, true, 'Verificando…'); const { error } = await sb.from('pagos_cuota').update({ estado: 'Verificado' }).eq('id', b.dataset.ok); if (error) { ocupado(b, false); toast(error.message, 'error'); } else { toast('Pago verificado: comprobante de cuota emitido. Ahora puedes enviarle el recibo.', 'ok'); await cargarMes(); } });
+  $$('#m-filas [data-no]').forEach(b => b.onclick = async () => { const o = prompt('Motivo del rechazo (se muestra a la persona):'); if (!o) return; const { error } = await sb.from('pagos_cuota').update({ estado: 'Rechazado', observacion: o }).eq('id', b.dataset.no); if (error) toast(error.message, 'error'); else { toast('Comprobante rechazado.', 'ok'); await cargarMes(); } });
+  $$('#m-filas [data-ver]').forEach(a => a.onclick = async e => { e.preventDefault(); const ruta = a.dataset.ver.split('|')[1]; if (!ruta) return toast('Este pago no tiene comprobante adjunto.', 'error'); try { window.open(await urlFirmada(ruta), '_blank'); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } });
+}
+function excelMes() {
+  const l = filtrarMes(); if (!l.length) return toast('No hay filas con este filtro.', 'error');
+  const filas = l.map(x => { const e = estadoMes(x); return { 'No. afiliado': x.numero_afiliacion, 'Persona': x.nombre_completo, 'Sección': x.seccion, 'Correo': x.correo || '', 'Teléfono': x.telefono || '', 'Alta': fecha(x.fecha_alta), 'Mes': mesTexto(M.ym), 'Estado del mes': ETIQUETA[e][1], 'Comprobante (folio)': x.comprobante_folio || '', 'Monto': x.monto || '', 'Fecha de operación': x.fecha_operacion ? fecha(x.fecha_operacion) : '', 'Pago pedido el': fh(x.requisicion_at), 'Pedido por': x.requisicion_medio ? medioTxt(x.requisicion_medio) : '', 'Veces pedido': x.requisiciones || 0, 'Recibo enviado el': fh(x.recibo_at), 'Pagos verificados (histórico)': x.pagos_verificados || 0, 'Último pago verificado': x.ultimo_pago ? fecha(x.ultimo_pago) : '', 'Liga del recibo': x.recibo_token && e === 'pagado' ? ligaRecibo(x) : '' }; });
+  const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(filas); ws['!cols'] = Object.keys(filas[0]).map(c => ({ wch: c === 'Persona' ? 34 : c === 'Correo' ? 30 : c === 'Liga del recibo' ? 60 : Math.max(12, c.length + 2) }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Cobranza ' + M.ym); XLSX.writeFile(wb, `cobranza-${M.ym}-${$('#m-filtro').value}.xlsx`);
+}
+
+// ===================== Pagos por verificar / padrón financiero =====================
+const fila = (x, acciones) => `<tr><td>${fecha(x.fecha_operacion)}</td><td><b>${esc(x.nombre)}</b><br><span class="tiny muted">${x.numero_afiliacion ? 'No. ' + x.numero_afiliacion : (x.curp ? 'CURP ' + esc(x.curp) : '')}${x.folio_solicitud ? ' · ' + esc(x.folio_solicitud) : ''}${x.afiliado_nombre ? ' · ' + esc(x.seccion || '') : ' · <span style="color:var(--ambar)">sin ligar al padrón</span>'}</span></td><td>${esc(x.periodo)}${x.periodo_mes ? '' : '<br><span class="tiny" style="color:var(--ambar)">mes no reconocido</span>'}</td><td class="num">${dinero(x.monto)}</td><td><span class="etiqueta ${x.estado === 'Verificado' ? 'verde' : x.estado === 'Rechazado' ? 'rojo' : 'amarillo'}">${esc(x.estado)}</span>${x.comprobante_folio ? `<br><span class="tiny muted">${esc(x.comprobante_folio)}</span>` : ''}${x.observacion ? `<br><span class="tiny" style="color:var(--ambar)">${esc(x.observacion)}</span>` : ''}${x.estado === 'Verificado' ? (x.recibo_enviado_at ? `<br><span class="tiny" style="color:var(--verde)">✓ recibo enviado ${fh(x.recibo_enviado_at)} por ${medioTxt(x.recibo_enviado_medio)}</span>` : '<br><span class="tiny" style="color:var(--ambar)">recibo sin enviar</span>') : ''}</td><td class="small">${x.comprobante_url ? `<a href="#" data-ver="${x.id}">Comprobante bancario</a>` : '—'}${x.estado === 'Verificado' ? ` · <a href="${ligaRecibo(x)}" target="_blank">Recibo (comprobante de cuota)</a>` : ''}${acciones ? '<br>' + acciones : ''}</td></tr>`;
+const accionesRecibo = x => { if (x.estado !== 'Verificado' || !puede) return ''; const c = correoRecibo(x, cfg); const tel = x.afiliado_telefono || x.telefono, correo = x.afiliado_correo || ''; return x.afiliado_id ? botones(tel, correo, c.asunto, c.cuerpo, waRecibo(x, cfg), `recibo|${x.afiliado_id}|${x.id}`, 'Enviar recibo') : `<span class="tiny muted">Para enviar el recibo con registro, liga el pago al padrón (número de afiliado o CURP).</span> <a class="btn wa chico" href="${whatsapp(tel, waRecibo(x, cfg))}" target="_blank">WhatsApp</a>`; };
+async function lista(filtroEstado) {
+  let q = sb.from('v_pagos').select('*').order('fecha_operacion', { ascending: false }).limit(500); if (filtroEstado) q = q.eq('estado', filtroEstado);
+  const { data, error } = await q; if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return null; } return data;
+}
+function enlazarVer(data) { $$('[data-ver]').forEach(a => a.onclick = async e => { e.preventDefault(); const x = data.find(y => y.id === a.dataset.ver); try { window.open(await urlFirmada(x.comprobante_url), '_blank'); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } }); }
+function enlazarEnvioPago(data) {
+  enlazarCopiar();
+  $$('[data-envio]').forEach(a => a.addEventListener('click', async () => { const [paso, afiliadoId, pagoId, medio] = a.dataset.envio.split('|'); const x = data.find(y => y.id === pagoId); const ym = x && x.periodo_mes ? String(x.periodo_mes).slice(0, 7) : hoy().slice(0, 7); if (await registrarEnvio(afiliadoId, ym, paso, medio, pagoId)) { if (x) { x.recibo_enviado_at = new Date().toISOString(); x.recibo_enviado_medio = medio; } toast('Envío del recibo registrado.', 'ok'); } }));
+}
+let recien = [];
+async function pendientes() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>'; const data = await lista('Recibido'); if (!data) return;
+  $('#resumen').textContent = `${data.length} pago(s) por verificar`;
+  panel.innerHTML = `<p class="small muted">Verifica cada operación contra el estado de cuenta bancario. Al verificar se asigna el número de comprobante (recibo) y queda en el padrón financiero; en seguida puedes enviárselo a la persona.</p>
+    ${recien.length ? `<div class="tarjeta" style="margin-bottom:1rem"><b class="small">Verificados hace un momento · envía el recibo</b><div class="tabla-envoltura"><table class="tabla"><tbody>${recien.map(x => fila(x, accionesRecibo(x))).join('')}</tbody></table></div></div>` : ''}
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobante · acciones</th></tr></thead><tbody>${data.length ? data.map(x => fila(x, puede ? `<button class="btn chico verde" data-ok="${x.id}">Verificar</button> <button class="btn discreto chico" data-no="${x.id}">Rechazar</button>` : '')).join('') : '<tr><td colspan="6" class="vacio">No hay pagos por verificar.</td></tr>'}</tbody></table></div>`;
+  enlazarVer([...data, ...recien]); enlazarEnvioPago(recien);
+  $$('[data-ok]').forEach(b => b.onclick = async () => { ocupado(b, true, 'Verificando…'); const { error } = await sb.from('pagos_cuota').update({ estado: 'Verificado' }).eq('id', b.dataset.ok); if (error) { ocupado(b, false); toast(error.message, 'error'); } else { const { data: v } = await sb.from('v_pagos').select('*').eq('id', b.dataset.ok).single(); if (v) recien = [v, ...recien.filter(r => r.id !== v.id)]; toast('Pago verificado: comprobante ' + (v ? v.comprobante_folio : '') + ' emitido.', 'ok'); pendientes(); } });
+  $$('[data-no]').forEach(b => b.onclick = async () => { const o = prompt('Motivo del rechazo (se muestra a la persona):'); if (!o) return; const { error } = await sb.from('pagos_cuota').update({ estado: 'Rechazado', observacion: o }).eq('id', b.dataset.no); if (error) toast(error.message, 'error'); else { toast('Pago rechazado.', 'ok'); pendientes(); } });
+}
+async function historial() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>'; const data = await lista(null); if (!data) return;
+  const verificados = data.filter(x => x.estado === 'Verificado'); const total = verificados.reduce((a, x) => a + Number(x.monto), 0);
+  panel.innerHTML = `<div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem"><input type="text" id="h-texto" placeholder="Buscar por nombre, número, CURP o periodo" style="max-width:320px"><span class="small muted">${verificados.length} verificados · ${dinero(total)} acumulado</span><button class="btn secundario chico" id="csv" style="margin-left:auto">Descargar Excel</button></div>
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobantes · recibo</th></tr></thead><tbody id="h-filas"></tbody></table></div>`;
+  const pintar = () => { const t = $('#h-texto').value.toLowerCase(); const l = data.filter(x => !t || [x.nombre, x.numero_afiliacion, x.curp, x.periodo, x.comprobante_folio].join(' ').toLowerCase().includes(t)); $('#h-filas').innerHTML = l.length ? l.map(x => fila(x, accionesRecibo(x))).join('') : '<tr><td colspan="6" class="vacio">Sin registros.</td></tr>'; enlazarVer(data); enlazarEnvioPago(data); };
+  $('#h-texto').oninput = pintar; pintar();
+  $('#csv').onclick = () => { const filas = data.map(x => ({ 'Comprobante': x.comprobante_folio || '', 'Estado': x.estado, 'Fecha de operación': fecha(x.fecha_operacion), 'Persona': x.nombre, 'No. afiliado': x.numero_afiliacion || '', 'CURP': x.curp || '', 'Sección': x.seccion || '', 'Periodo': x.periodo, 'Mes': x.periodo_mes ? mesTexto(x.periodo_mes) : '', 'Monto': Number(x.monto), 'Teléfono': x.telefono || '', 'Observación': x.observacion || '', 'Recibo enviado': fh(x.recibo_enviado_at), 'Liga del recibo': x.estado === 'Verificado' ? ligaRecibo(x) : '' })); const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(filas); ws['!cols'] = Object.keys(filas[0] || {}).map(c => ({ wch: c === 'Persona' ? 34 : c === 'Liga del recibo' ? 60 : Math.max(12, c.length + 2) })); XLSX.utils.book_append_sheet(wb, ws, 'Padrón financiero'); XLSX.writeFile(wb, `padron-financiero-${hoy()}.xlsx`); };
+}
+
+// ===================== Carta de bienvenida AF-09 =====================
+async function bienvenida() {
   panel.innerHTML = '<p class="cargando">Cargando afiliados…</p>';
   const { data, error } = await sb.from('v_cobranza').select('*').eq('estatus', 'Activo').order('fecha_alta', { ascending: false });
   if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
   const sinPago = data.filter(x => !x.pagos_verificados);
   $('#resumen').textContent = `${data.length} afiliados activos · ${sinPago.length} sin ningún pago verificado`;
-  panel.innerHTML = `<p class="small muted">Cada alta autorizada por el Secretario General aparece aquí. Envía la <b>carta de Finanzas (AF-09)</b> por WhatsApp o correo con un clic: lleva la cuenta oficial, el monto, el concepto y la liga para registrar el pago.</p>
+  panel.innerHTML = `<p class="small muted">Cada alta autorizada por el Secretario General aparece aquí. Envía la <b>carta de Finanzas (AF-09)</b> por WhatsApp o correo con un clic: lleva la cuenta oficial, el monto, el concepto y la liga para registrar el pago. Para pedir la cuota de un mes concreto usa la pestaña <b>Cobranza del mes</b>.</p>
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem"><select id="c-filtro"><option value="sin">Sin pago verificado</option><option value="todos">Todos los activos</option></select><input type="text" id="c-texto" placeholder="Buscar por nombre, número o sección" style="max-width:300px"></div>
     <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Persona</th><th>Sección</th><th>Alta</th><th>Último pago verificado</th><th>Enviar carta AF-09</th></tr></thead><tbody id="c-filas"></tbody></table></div><p class="tiny muted mt-1">La carta AF-09 lleva el número de afiliación: conviene enviarla cuando la persona ya recogió su credencial en su Sección (columna Alta).</p>`;
   const pintar = () => {
     const t = $('#c-texto').value.toLowerCase(); const base = $('#c-filtro').value === 'sin' ? sinPago : data;
     const l = base.filter(x => !t || [x.nombre_completo, x.numero_afiliacion, x.seccion].join(' ').toLowerCase().includes(t));
     $('#c-filas').innerHTML = l.length ? l.map(x => { const c = correoFinanzas(x, cfg); return `<tr><td class="num">${x.numero_afiliacion}</td><td><b>${esc(x.nombre_completo)}</b><br><span class="tiny muted">📱 ${esc(x.telefono || '—')} · ${esc(x.correo || '')}</span></td><td>${esc(x.seccion)}</td><td>${fecha(x.fecha_alta)}${x.entrega_at ? '<br><span class="tiny muted">credencial entregada ' + fecha(String(x.entrega_at).slice(0, 10)) + '</span>' : '<br><span class="tiny" style="color:var(--ambar)">aún no recoge su credencial</span>'}</td><td>${x.ultimo_pago ? fecha(x.ultimo_pago) + '<br><span class="tiny muted">' + esc(x.ultimo_periodo || '') + ' · ' + x.pagos_verificados + ' pago(s)</span>' : '<span class="etiqueta amarillo">sin pago</span>'}${x.pagos_por_verificar ? `<br><span class="tiny" style="color:var(--ambar)">${x.pagos_por_verificar} por verificar</span>` : ''}</td>
-      <td><a class="btn wa chico" href="${whatsapp(x.telefono, c.cuerpo)}" target="_blank" ${!x.telefono ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(x.correo, c.asunto, c.cuerpo)}">Correo</a> <a class="btn discreto chico" href="${ROOT}documento.html?tipo=finanzas&id=${x.id}" target="_blank">Carta PDF</a></td></tr>`; }).join('') : '<tr><td colspan="6" class="vacio">Sin afiliados en este filtro.</td></tr>';
+      <td><span class="fin-acciones"><a class="btn wa chico" href="${whatsapp(x.telefono, c.cuerpo)}" target="_blank" ${!x.telefono ? 'style="opacity:.5;pointer-events:none"' : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(x.correo, c.asunto, c.cuerpo)}">Correo</a> <button type="button" class="btn discreto chico" data-copiar-html="${encodeURIComponent(c.cuerpo)}" title="Copiar con formato para Outlook">📋</button> <a class="btn discreto chico" href="${ROOT}documento.html?tipo=finanzas&id=${x.id}" target="_blank">Carta PDF</a></span></td></tr>`; }).join('') : '<tr><td colspan="6" class="vacio">Sin afiliados en este filtro.</td></tr>';
+    enlazarCopiar();
   };
   $('#c-filtro').onchange = pintar; $('#c-texto').oninput = pintar; pintar();
 }
 
-const fila = (x, acciones) => `<tr><td>${fecha(x.fecha_operacion)}</td><td><b>${esc(x.nombre)}</b><br><span class="tiny muted">${x.numero_afiliacion ? 'No. ' + x.numero_afiliacion : (x.curp ? 'CURP ' + esc(x.curp) : '')}${x.folio_solicitud ? ' · ' + esc(x.folio_solicitud) : ''}${x.afiliado_nombre ? ' · ' + esc(x.seccion || '') : ' · <span style="color:var(--ambar)">sin ligar al padrón</span>'}</span></td><td>${esc(x.periodo)}</td><td class="num">${dinero(x.monto)}</td><td><span class="etiqueta ${x.estado === 'Verificado' ? 'verde' : x.estado === 'Rechazado' ? 'rojo' : 'amarillo'}">${esc(x.estado)}</span>${x.comprobante_folio ? `<br><span class="tiny muted">${esc(x.comprobante_folio)}</span>` : ''}${x.observacion ? `<br><span class="tiny" style="color:var(--ambar)">${esc(x.observacion)}</span>` : ''}</td><td class="small">${x.comprobante_url ? `<a href="#" data-ver="${x.id}">Comprobante bancario</a>` : '—'}${x.estado === 'Verificado' ? ` · <a href="${ROOT}documento.html?tipo=comprobante&id=${x.id}" target="_blank">Comprobante de cuota</a>` : ''}${acciones ? ' · ' + acciones : ''}</td></tr>`;
-async function lista(filtroEstado) {
-  let q = sb.from('v_pagos').select('*').order('fecha_operacion', { ascending: false }).limit(500); if (filtroEstado) q = q.eq('estado', filtroEstado);
-  const { data, error } = await q; if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return null; } return data;
-}
-function enlazarVer(data) { $$('[data-ver]').forEach(a => a.onclick = async e => { e.preventDefault(); const x = data.find(y => y.id === a.dataset.ver); try { window.open(await urlFirmada(x.comprobante_url), '_blank'); } catch (err) { toast('No se pudo abrir: ' + err.message, 'error'); } }); }
-
-async function pendientes() {
-  panel.innerHTML = '<p class="cargando">Cargando…</p>'; const data = await lista('Recibido'); if (!data) return;
-  $('#resumen').textContent = `${data.length} pago(s) por verificar`;
-  panel.innerHTML = `<p class="small muted">Verifica cada operación contra el estado de cuenta bancario. Al verificar se asigna el número de comprobante y queda en el padrón financiero.</p>
-    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobante · acciones</th></tr></thead><tbody>${data.length ? data.map(x => fila(x, puede ? `<button class="btn chico verde" data-ok="${x.id}">Verificar</button> <button class="btn discreto chico" data-no="${x.id}">Rechazar</button>` : '')).join('') : '<tr><td colspan="6" class="vacio">No hay pagos por verificar.</td></tr>'}</tbody></table></div>`;
-  enlazarVer(data);
-  $$('[data-ok]').forEach(b => b.onclick = async () => { const { error } = await sb.from('pagos_cuota').update({ estado: 'Verificado' }).eq('id', b.dataset.ok); if (error) toast(error.message, 'error'); else { toast('Pago verificado y comprobante emitido.', 'ok'); pendientes(); } });
-  $$('[data-no]').forEach(b => b.onclick = async () => { const o = prompt('Motivo del rechazo (se muestra a la persona):'); if (!o) return; const { error } = await sb.from('pagos_cuota').update({ estado: 'Rechazado', observacion: o }).eq('id', b.dataset.no); if (error) toast(error.message, 'error'); else { toast('Pago rechazado.', 'ok'); pendientes(); } });
-}
-async function historial() {
-  panel.innerHTML = '<p class="cargando">Cargando…</p>'; const data = await lista(null); if (!data) return;
-  const verificados = data.filter(x => x.estado === 'Verificado'); const total = verificados.reduce((a, x) => a + Number(x.monto), 0);
-  panel.innerHTML = `<div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem"><input type="text" id="h-texto" placeholder="Buscar por nombre, número, CURP o periodo" style="max-width:320px"><span class="small muted">${verificados.length} verificados · ${dinero(total)} acumulado</span><button class="btn secundario chico" id="csv" style="margin-left:auto">Descargar CSV</button></div>
-    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobantes</th></tr></thead><tbody id="h-filas"></tbody></table></div>`;
-  const pintar = () => { const t = $('#h-texto').value.toLowerCase(); const l = data.filter(x => !t || [x.nombre, x.numero_afiliacion, x.curp, x.periodo, x.comprobante_folio].join(' ').toLowerCase().includes(t)); $('#h-filas').innerHTML = l.length ? l.map(x => fila(x, '')).join('') : '<tr><td colspan="6" class="vacio">Sin registros.</td></tr>'; enlazarVer(data); };
-  $('#h-texto').oninput = pintar; pintar();
-  $('#csv').onclick = () => { const cols = ['comprobante_folio', 'estado', 'fecha_operacion', 'nombre', 'numero_afiliacion', 'curp', 'seccion', 'periodo', 'monto', 'telefono', 'observacion']; const csv = '﻿' + cols.join(',') + '\n' + data.map(x => cols.map(c => `"${String(x[c] ?? '').replace(/"/g, '""')}"`).join(',')).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `padron-financiero-${hoy()}.csv`; a.click(); };
-}
+// ===================== Registrar pago recibido por correo =====================
 function nuevo() {
   if (!puede) { panel.innerHTML = '<p class="small muted">Solo lectura.</p>'; return; }
   panel.innerHTML = `<form id="f-nuevo" class="tarjeta" style="max-width:720px">
-    <p class="small muted">Para los comprobantes que llegan al correo de Finanzas. Se registra ya verificado si así lo indicas.</p>
+    <p class="small muted">Para los comprobantes que llegan al correo o al WhatsApp de Finanzas. Se registra ya verificado si así lo indicas; el recibo se emite al verificar.</p>
     <div class="campo"><label for="n-nombre">Nombre completo *</label><input type="text" id="n-nombre" required></div>
     <div class="fila"><div class="campo"><label for="n-num">Número de afiliación</label><input type="number" id="n-num" min="1"></div><div class="campo"><label for="n-curp">CURP</label><input type="text" id="n-curp" maxlength="18" style="text-transform:uppercase"></div></div>
-    <div class="fila"><div class="campo"><label for="n-tel">Teléfono</label><input type="tel" id="n-tel"></div><div class="campo"><label for="n-periodo">Periodo *</label><input type="text" id="n-periodo" required></div></div>
-    <div class="fila"><div class="campo"><label for="n-monto">Monto *</label><input type="number" id="n-monto" required min="1" step="0.01" value="360"></div><div class="campo"><label for="n-fecha">Fecha de la operación *</label><input type="date" id="n-fecha" required value="${hoy()}"></div></div>
+    <div class="fila"><div class="campo"><label for="n-tel">Teléfono</label><input type="tel" id="n-tel"></div><div class="campo"><label for="n-mes">Mes de la cuota *</label><input type="month" id="n-mes" required value="${M.ym}"></div></div>
+    <div class="fila"><div class="campo"><label for="n-monto">Monto *</label><input type="number" id="n-monto" required min="1" step="0.01" value="${cfg.cuota_monto || 360}"></div><div class="campo"><label for="n-fecha">Fecha de la operación *</label><input type="date" id="n-fecha" required value="${hoy()}"></div></div>
     <div class="campo"><label for="n-archivo">Comprobante bancario</label><input type="file" id="n-archivo" accept="application/pdf,image/jpeg,image/png"></div>
-    <label class="casilla"><input type="checkbox" id="n-verificado" checked> <span>Ya verifiqué la operación en el banco (emitir comprobante)</span></label>
+    <label class="casilla"><input type="checkbox" id="n-verificado" checked> <span>Ya verifiqué la operación en el banco (emitir comprobante de cuota)</span></label>
     <div class="acciones"><button class="btn" type="submit" id="n-enviar">Registrar</button></div></form>`;
   $('#f-nuevo').onsubmit = async e => {
     e.preventDefault(); const v = id => $('#' + id).value.trim(); const btn = $('#n-enviar'); ocupado(btn, true, 'Registrando…');
     try {
+      if (!v('n-num') && !v('n-curp')) throw new Error('Indica el número de afiliación o la CURP.');
       let ruta = null, nombreArchivo = null; const f = $('#n-archivo').files[0];
       if (f) { const err = validarArchivo(f); if (err) throw new Error(err); ruta = `pagos/${(v('n-curp') || 'num-' + v('n-num') || 'sin').replace(/[^A-Z0-9-]/gi, '')}/${Date.now()}.${(f.name.split('.').pop() || 'pdf').toLowerCase()}`; await subirArchivo(ruta, f); nombreArchivo = f.name; }
-      const { data, error } = await sb.from('pagos_cuota').insert({ nombre: v('n-nombre'), numero_afiliacion: v('n-num') ? Number(v('n-num')) : null, curp: v('n-curp') || null, telefono: v('n-tel') || null, periodo: v('n-periodo'), monto: Number(v('n-monto')), fecha_operacion: v('n-fecha'), comprobante_url: ruta, comprobante_nombre: nombreArchivo, canal: 'finanzas' }).select('id').single();
+      const { data, error } = await sb.from('pagos_cuota').insert({ nombre: v('n-nombre'), numero_afiliacion: v('n-num') ? Number(v('n-num')) : null, curp: v('n-curp') || null, telefono: v('n-tel') || null, periodo: mesTexto(v('n-mes')), periodo_mes: v('n-mes') + '-01', monto: Number(v('n-monto')), fecha_operacion: v('n-fecha'), comprobante_url: ruta, comprobante_nombre: nombreArchivo, canal: 'finanzas' }).select('id').single();
       if (error) throw error;
-      if ($('#n-verificado').checked) { const { error: e2 } = await sb.from('pagos_cuota').update({ estado: 'Verificado' }).eq('id', data.id); if (e2) throw e2; }
-      toast('Pago registrado.', 'ok'); $$('#pestanas button')[0].click();
+      if ($('#n-verificado').checked) { const { error: e2 } = await sb.from('pagos_cuota').update({ estado: 'Verificado' }).eq('id', data.id); if (e2) throw e2; const { data: vv } = await sb.from('v_pagos').select('*').eq('id', data.id).single(); if (vv) recien = [vv, ...recien]; }
+      toast('Pago registrado.' + ($('#n-verificado').checked ? ' Envía el recibo desde "Pagos por verificar" (arriba) o "Cobranza del mes".' : ''), 'ok'); M.ym = v('n-mes'); guardar('fin_mes', M.ym); $$('#pestanas button')[0].click();
     } catch (err) { ocupado(btn, false); toast('No se pudo registrar: ' + (err.message || err), 'error'); }
   };
 }
+mes();
 </script>
 </body>
 </html>
