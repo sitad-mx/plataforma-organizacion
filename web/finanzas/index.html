@@ -26,7 +26,7 @@
     <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">Comité Ejecutivo Nacional</p><h1>Secretaría de Finanzas · Cuotas</h1></div>
     <div id="resumen" class="small muted"></div>
   </div>
-  <div class="pestanas" id="pestanas"><button data-p="mes" class="activa">Cobranza del mes</button><button data-p="pendientes">Pagos por verificar</button><button data-p="historial">Padrón financiero</button><button data-p="bienvenida">Carta de bienvenida (AF-09)</button><button data-p="nuevo">Registrar pago recibido por correo</button></div>
+  <div class="pestanas" id="pestanas"><button data-p="mes" class="activa">Cobranza del mes</button><button data-p="pendientes">Pagos por verificar</button><button data-p="historial">Padrón financiero</button><button data-p="reportes">Reportes</button><button data-p="bienvenida">Carta de bienvenida (AF-09)</button><button data-p="nuevo">Registrar pago recibido por correo</button></div>
   <section id="panel"><p class="cargando">Cargando…</p></section>
 </main>
 <footer id="pie"></footer>
@@ -36,7 +36,10 @@ const p = await requerirRol(['finanzas', 'cen_organizacion', 'cen_lectura', 'sg'
 await armazon({ titulo: 'Secretaría de Finanzas', nav: [{ href: ROOT + 'cen/', texto: 'Bandeja', id: 'cen' }, { href: ROOT + 'sg/', texto: 'Autorizaciones', id: 'sg' }, { href: ROOT + 'finanzas/', texto: 'Finanzas', id: 'finanzas' }], activa: 'finanzas' });
 const puede = ['finanzas', 'cen_organizacion'].includes(p.rol); const panel = $('#panel'); const quien = p.nombre || p.email;
 const { data: cfgRows } = await sb.from('configuracion').select('clave, valor'); const cfg = Object.fromEntries((cfgRows || []).map(x => [x.clave, x.valor]));
-const P = { mes, pendientes, historial, bienvenida, nuevo };
+const P = { mes, pendientes, historial, reportes, bienvenida, nuevo };
+const opcionesSeccion = (lista, actual) => `<option value="">Todas las secciones</option>` + [...new Set(lista.map(x => x.seccion).filter(Boolean))].sort().map(s => `<option value="${esc(s)}" ${s === actual ? 'selected' : ''}>${esc(s)}</option>`).join('');
+const mesesEntre = (a, b) => { const out = []; let [y, m] = String(a).slice(0, 7).split('-').map(Number); const [yb, mb] = String(b).slice(0, 7).split('-').map(Number); while (y < yb || (y === yb && m <= mb)) { out.push(`${y}-${String(m).padStart(2, '0')}`); m++; if (m > 12) { m = 1; y++; } } return out; };
+function excelDe(filas, hoja, archivo, anchos = {}) { if (!filas.length) return toast('No hay filas con este filtro.', 'error'); const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(filas); ws['!cols'] = Object.keys(filas[0]).map(c => ({ wch: anchos[c] || (c === 'Persona' ? 34 : Math.max(11, c.length + 2)) })); XLSX.utils.book_append_sheet(wb, ws, hoja.slice(0, 31)); XLSX.writeFile(wb, archivo); }
 $$('#pestanas button').forEach(b => b.onclick = () => { $$('#pestanas button').forEach(x => x.classList.remove('activa')); b.classList.add('activa'); P[b.dataset.p](); });
 const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch {} }; const leer = (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } };
 const fh = d => d ? fecha(String(d).slice(0, 10)) + ' ' + String(d).slice(11, 16) : '';
@@ -49,7 +52,7 @@ async function registrarEnvio(afiliadoId, ym, paso, medio, pagoId) {
 }
 
 // ===================== Cobranza del mes =====================
-let M = { ym: leer('fin_mes', hoy().slice(0, 7)), filtro: leer('fin_filtro', 'todos'), texto: '', datos: [] };
+let M = { ym: leer('fin_mes', hoy().slice(0, 7)), filtro: leer('fin_filtro', 'todos'), seccion: leer('fin_seccion', ''), texto: '', datos: [] };
 function estadoMes(x) {
   if (x.pago_estado === 'Verificado') return 'pagado';
   if (x.pago_estado === 'Recibido') return 'verificar';
@@ -59,13 +62,14 @@ function estadoMes(x) {
 const ETIQUETA = { pagado: ['verde', 'Pagado'], verificar: ['amarillo', 'Comprobante recibido · por verificar'], rechazado: ['rojo', 'Comprobante rechazado'], pedido: ['', 'Pedido · sin comprobante'], sin: ['', 'Sin pago'] };
 async function mes() {
   panel.innerHTML = `<p class="small muted">Elige el mes. Por cada afiliado(a) activo(a) ves si ya pagó ese mes, si su comprobante está por verificar o si hay que pedirle el pago. Los botones de WhatsApp y correo abren el mensaje ya redactado (cuenta, monto, concepto y liga para subir el comprobante) y <b>registran el envío</b> (quién, cuándo, por qué medio).</p>
-    <div class="fin-barra"><label class="small" for="m-mes"><b>Mes</b></label><input type="month" id="m-mes" value="${M.ym}"><select id="m-filtro"><option value="todos">Todos los activos</option><option value="sin">Sin pago · hay que pedirlo</option><option value="pedido">Ya pedido · sin comprobante</option><option value="verificar">Comprobante por verificar</option><option value="pagado">Pagados</option><option value="sinrecibo">Pagados sin recibo enviado</option></select><input type="text" id="m-texto" placeholder="Buscar por nombre, número o sección" style="max-width:280px"><button class="btn secundario chico" id="m-excel" style="margin-left:auto">⬇ Excel del mes</button></div>
+    <div class="fin-barra"><label class="small" for="m-mes"><b>Mes</b></label><input type="month" id="m-mes" value="${M.ym}"><select id="m-seccion"><option value="">Todas las secciones</option></select><select id="m-filtro"><option value="todos">Todos los activos</option><option value="sin">Sin pago · hay que pedirlo</option><option value="pedido">Ya pedido · sin comprobante</option><option value="verificar">Comprobante por verificar</option><option value="pagado">Pagados</option><option value="sinrecibo">Pagados sin recibo enviado</option></select><input type="text" id="m-texto" placeholder="Buscar por nombre, número o sección" style="max-width:280px"><button class="btn secundario chico" id="m-excel" style="margin-left:auto">⬇ Excel del mes</button></div>
     <div class="fin-resumen" id="m-resumen"></div>
-    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Persona</th><th>Sección</th><th>Estado del mes</th><th>Acciones</th></tr></thead><tbody id="m-filas"><tr><td colspan="5" class="cargando">Cargando…</td></tr></tbody></table></div>
-    <p class="tiny muted mt-1">Un afiliado aparece "pagado" cuando Finanzas verificó un comprobante de ese mes. El recibo (comprobante de cuota con folio) se genera solo al verificar; con "Enviar recibo" se lo mandas con su liga.</p>`;
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th title="Número de afiliado en el Padrón (lo asigna el sistema al dictaminar favorable)">No. afiliado</th><th>Persona</th><th>Sección</th><th>Estado del mes</th><th>Acciones</th></tr></thead><tbody id="m-filas"><tr><td colspan="5" class="cargando">Cargando…</td></tr></tbody></table></div>
+    <p class="tiny muted mt-1">"No. afiliado" es el número de registro en el Padrón (el que va en su credencial y en su carta de Finanzas). Un afiliado aparece "pagado" cuando Finanzas verificó un comprobante de ese mes. El recibo (comprobante de cuota con folio) se genera solo al verificar; con "Enviar recibo" se lo mandas con su liga.</p>`;
   $('#m-filtro').value = M.filtro;
   $('#m-mes').onchange = e => { M.ym = e.target.value || hoy().slice(0, 7); guardar('fin_mes', M.ym); cargarMes(); };
   $('#m-filtro').onchange = e => { M.filtro = e.target.value; guardar('fin_filtro', M.filtro); pintarMes(); };
+  $('#m-seccion').onchange = e => { M.seccion = e.target.value; guardar('fin_seccion', M.seccion); pintarMes(); };
   $('#m-texto').oninput = e => { M.texto = e.target.value.toLowerCase(); pintarMes(); };
   $('#m-excel').onclick = excelMes;
   await cargarMes();
@@ -73,15 +77,15 @@ async function mes() {
 async function cargarMes() {
   const { data, error } = await sb.rpc('cobranza_mes', { p_mes: M.ym + '-01' });
   if (error) { $('#m-filas').innerHTML = `<tr><td colspan="5"><div class="aviso error">${esc(error.message)}</div></td></tr>`; return; }
-  M.datos = data || []; pintarMes();
+  M.datos = data || []; const sel = $('#m-seccion'); if (sel) { sel.innerHTML = opcionesSeccion(M.datos, M.seccion); if (sel.value !== M.seccion) { M.seccion = ''; guardar('fin_seccion', ''); } } pintarMes();
 }
 function filtrarMes() {
-  return M.datos.filter(x => { const e = estadoMes(x); if (M.filtro === 'sinrecibo') return e === 'pagado' && !x.recibo_at; if (M.filtro !== 'todos' && e !== M.filtro) return false; return !M.texto || [x.nombre_completo, x.numero_afiliacion, x.seccion, x.correo, x.telefono].join(' ').toLowerCase().includes(M.texto); });
+  return M.datos.filter(x => { if (M.seccion && x.seccion !== M.seccion) return false; const e = estadoMes(x); if (M.filtro === 'sinrecibo') return e === 'pagado' && !x.recibo_at; if (M.filtro !== 'todos' && e !== M.filtro) return false; return !M.texto || [x.nombre_completo, x.numero_afiliacion, x.seccion, x.correo, x.telefono].join(' ').toLowerCase().includes(M.texto); });
 }
 function pintarMes() {
-  const n = e => M.datos.filter(x => estadoMes(x) === e).length;
-  $('#m-resumen').innerHTML = `<span><b>${M.datos.length}</b> activos</span><span style="color:var(--verde)"><b>${n('pagado')}</b> pagados</span><span style="color:var(--ambar)"><b>${n('verificar')}</b> por verificar</span><span><b>${n('pedido')}</b> pedidos sin comprobante</span><span style="color:var(--rojo)"><b>${n('sin') + n('rechazado')}</b> sin pago</span><span class="muted">· ${mesTexto(M.ym)}</span>`;
-  $('#resumen').textContent = `${mesTexto(M.ym)}: ${n('pagado')} de ${M.datos.length} pagados`;
+  const base = M.seccion ? M.datos.filter(x => x.seccion === M.seccion) : M.datos; const n = e => base.filter(x => estadoMes(x) === e).length;
+  $('#m-resumen').innerHTML = `<span><b>${base.length}</b> activos${M.seccion ? ' en ' + esc(M.seccion) : ''}</span><span style="color:var(--verde)"><b>${n('pagado')}</b> pagados</span><span style="color:var(--ambar)"><b>${n('verificar')}</b> por verificar</span><span><b>${n('pedido')}</b> pedidos sin comprobante</span><span style="color:var(--rojo)"><b>${n('sin') + n('rechazado')}</b> sin pago</span><span class="muted">· ${mesTexto(M.ym)}</span>`;
+  $('#resumen').textContent = `${mesTexto(M.ym)}: ${n('pagado')} de ${base.length} pagados${M.seccion ? ' · ' + M.seccion : ''}`;
   const l = filtrarMes();
   $('#m-filas').innerHTML = l.length ? l.map(x => {
     const e = estadoMes(x); const [color, texto] = ETIQUETA[e]; const ym = M.ym;
@@ -133,20 +137,82 @@ async function pendientes() {
   panel.innerHTML = '<p class="cargando">Cargando…</p>'; const data = await lista('Recibido'); if (!data) return;
   $('#resumen').textContent = `${data.length} pago(s) por verificar`;
   panel.innerHTML = `<p class="small muted">Verifica cada operación contra el estado de cuenta bancario. Al verificar se asigna el número de comprobante (recibo) y queda en el padrón financiero; en seguida puedes enviárselo a la persona.</p>
+    <div class="fin-barra"><select id="p-seccion">${opcionesSeccion(data, '')}</select><span class="tiny muted">Los pagos sin ligar al padrón aparecen en todas las secciones.</span></div>
     ${recien.length ? `<div class="tarjeta" style="margin-bottom:1rem"><b class="small">Verificados hace un momento · envía el recibo</b><div class="tabla-envoltura"><table class="tabla"><tbody>${recien.map(x => fila(x, accionesRecibo(x))).join('')}</tbody></table></div></div>` : ''}
-    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobante · acciones</th></tr></thead><tbody>${data.length ? data.map(x => fila(x, puede ? `<button class="btn chico verde" data-ok="${x.id}">Verificar</button> <button class="btn discreto chico" data-no="${x.id}">Rechazar</button>` : '')).join('') : '<tr><td colspan="6" class="vacio">No hay pagos por verificar.</td></tr>'}</tbody></table></div>`;
-  enlazarVer([...data, ...recien]); enlazarEnvioPago(recien);
+    <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobante · acciones</th></tr></thead><tbody id="p-filas"></tbody></table></div>`;
+  const pintarP = () => { const s = $('#p-seccion').value; const l = data.filter(x => !s || !x.afiliado_id || x.seccion === s); $('#p-filas').innerHTML = l.length ? l.map(x => fila(x, puede ? `<button class="btn chico verde" data-ok="${x.id}">Verificar</button> <button class="btn discreto chico" data-no="${x.id}">Rechazar</button>` : '')).join('') : '<tr><td colspan="6" class="vacio">No hay pagos por verificar.</td></tr>'; enlazarVer([...data, ...recien]); enlazarEnvioPago(recien); enlazarPend(); };
+  const enlazarPend = () => {
   $$('[data-ok]').forEach(b => b.onclick = async () => { ocupado(b, true, 'Verificando…'); const { error } = await sb.from('pagos_cuota').update({ estado: 'Verificado' }).eq('id', b.dataset.ok); if (error) { ocupado(b, false); toast(error.message, 'error'); } else { const { data: v } = await sb.from('v_pagos').select('*').eq('id', b.dataset.ok).single(); if (v) recien = [v, ...recien.filter(r => r.id !== v.id)]; toast('Pago verificado: comprobante ' + (v ? v.comprobante_folio : '') + ' emitido.', 'ok'); pendientes(); } });
   $$('[data-no]').forEach(b => b.onclick = async () => { const o = prompt('Motivo del rechazo (se muestra a la persona):'); if (!o) return; const { error } = await sb.from('pagos_cuota').update({ estado: 'Rechazado', observacion: o }).eq('id', b.dataset.no); if (error) toast(error.message, 'error'); else { toast('Pago rechazado.', 'ok'); pendientes(); } });
+  };
+  $('#p-seccion').onchange = pintarP; pintarP();
 }
 async function historial() {
   panel.innerHTML = '<p class="cargando">Cargando…</p>'; const data = await lista(null); if (!data) return;
   const verificados = data.filter(x => x.estado === 'Verificado'); const total = verificados.reduce((a, x) => a + Number(x.monto), 0);
-  panel.innerHTML = `<div style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem"><input type="text" id="h-texto" placeholder="Buscar por nombre, número, CURP o periodo" style="max-width:320px"><span class="small muted">${verificados.length} verificados · ${dinero(total)} acumulado</span><button class="btn secundario chico" id="csv" style="margin-left:auto">Descargar Excel</button></div>
+  panel.innerHTML = `<div class="fin-barra"><select id="h-seccion">${opcionesSeccion(data, '')}</select><select id="h-estado"><option value="">Todos los estados</option><option value="Verificado">Verificados</option><option value="Recibido">Por verificar</option><option value="Rechazado">Rechazados</option></select><input type="month" id="h-mes" title="Mes de la cuota (vacío = todos)"><input type="text" id="h-texto" placeholder="Buscar por nombre, número, CURP o periodo" style="max-width:300px"><span class="small muted" id="h-resumen">${verificados.length} verificados · ${dinero(total)} acumulado</span><button class="btn secundario chico" id="csv" style="margin-left:auto">Descargar Excel</button></div>
     <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Operación</th><th>Persona</th><th>Periodo</th><th>Monto</th><th>Estado</th><th>Comprobantes · recibo</th></tr></thead><tbody id="h-filas"></tbody></table></div>`;
-  const pintar = () => { const t = $('#h-texto').value.toLowerCase(); const l = data.filter(x => !t || [x.nombre, x.numero_afiliacion, x.curp, x.periodo, x.comprobante_folio].join(' ').toLowerCase().includes(t)); $('#h-filas').innerHTML = l.length ? l.map(x => fila(x, accionesRecibo(x))).join('') : '<tr><td colspan="6" class="vacio">Sin registros.</td></tr>'; enlazarVer(data); enlazarEnvioPago(data); };
-  $('#h-texto').oninput = pintar; pintar();
-  $('#csv').onclick = () => { const filas = data.map(x => ({ 'Comprobante': x.comprobante_folio || '', 'Estado': x.estado, 'Fecha de operación': fecha(x.fecha_operacion), 'Persona': x.nombre, 'No. afiliado': x.numero_afiliacion || '', 'CURP': x.curp || '', 'Sección': x.seccion || '', 'Periodo': x.periodo, 'Mes': x.periodo_mes ? mesTexto(x.periodo_mes) : '', 'Monto': Number(x.monto), 'Teléfono': x.telefono || '', 'Observación': x.observacion || '', 'Recibo enviado': fh(x.recibo_enviado_at), 'Liga del recibo': x.estado === 'Verificado' ? ligaRecibo(x) : '' })); const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(filas); ws['!cols'] = Object.keys(filas[0] || {}).map(c => ({ wch: c === 'Persona' ? 34 : c === 'Liga del recibo' ? 60 : Math.max(12, c.length + 2) })); XLSX.utils.book_append_sheet(wb, ws, 'Padrón financiero'); XLSX.writeFile(wb, `padron-financiero-${hoy()}.xlsx`); };
+  const filtrar = () => { const t = $('#h-texto').value.toLowerCase(), s = $('#h-seccion').value, e = $('#h-estado').value, m = $('#h-mes').value; return data.filter(x => (!s || x.seccion === s) && (!e || x.estado === e) && (!m || String(x.periodo_mes || '').slice(0, 7) === m) && (!t || [x.nombre, x.numero_afiliacion, x.curp, x.periodo, x.comprobante_folio].join(' ').toLowerCase().includes(t))); };
+  const pintar = () => { const l = filtrar(); const v = l.filter(x => x.estado === 'Verificado'); $('#h-resumen').textContent = `${l.length} pago(s) · ${v.length} verificados · ${dinero(v.reduce((a, x) => a + Number(x.monto), 0))}`; $('#h-filas').innerHTML = l.length ? l.map(x => fila(x, accionesRecibo(x))).join('') : '<tr><td colspan="6" class="vacio">Sin registros.</td></tr>'; enlazarVer(data); enlazarEnvioPago(data); };
+  $('#h-texto').oninput = pintar; $('#h-seccion').onchange = pintar; $('#h-estado').onchange = pintar; $('#h-mes').onchange = pintar; pintar();
+  $('#csv').onclick = () => { const filas = filtrar().map(x => ({ 'Comprobante': x.comprobante_folio || '', 'Estado': x.estado, 'Fecha de operación': fecha(x.fecha_operacion), 'Persona': x.nombre, 'No. afiliado': x.numero_afiliacion || '', 'CURP': x.curp || '', 'Sección': x.seccion || '', 'Periodo': x.periodo, 'Mes': x.periodo_mes ? mesTexto(x.periodo_mes) : '', 'Monto': Number(x.monto), 'Teléfono': x.telefono || '', 'Observación': x.observacion || '', 'Recibo enviado': fh(x.recibo_enviado_at), 'Liga del recibo': x.estado === 'Verificado' ? ligaRecibo(x) : '' })); const wb = XLSX.utils.book_new(); const ws = XLSX.utils.json_to_sheet(filas); ws['!cols'] = Object.keys(filas[0] || {}).map(c => ({ wch: c === 'Persona' ? 34 : c === 'Liga del recibo' ? 60 : Math.max(12, c.length + 2) })); XLSX.utils.book_append_sheet(wb, ws, 'Padrón financiero'); XLSX.writeFile(wb, `padron-financiero-${hoy()}.xlsx`); };
+}
+
+// ===================== Reportes =====================
+let R = { vista: leer('fin_rep_vista', 'seccion'), seccion: '', estado: '', texto: '' };
+async function reportes() {
+  panel.innerHTML = '<p class="cargando">Cargando…</p>';
+  const [{ data: afl, error: e1 }, { data: pagos, error: e2 }] = await Promise.all([sb.from('v_cobranza').select('*').order('numero_afiliacion'), sb.from('v_pagos').select('*').order('fecha_operacion')]);
+  if (e1 || e2) { panel.innerHTML = `<div class="aviso error">${esc((e1 || e2).message)}</div>`; return; }
+  const ymHoy = hoy().slice(0, 7); const porAfl = new Map();
+  (pagos || []).forEach(pg => { if (!pg.afiliado_id) return; if (!porAfl.has(pg.afiliado_id)) porAfl.set(pg.afiliado_id, []); porAfl.get(pg.afiliado_id).push(pg); });
+  const personas = (afl || []).map(x => {
+    const ps = porAfl.get(x.id) || []; const ver = ps.filter(p => p.estado === 'Verificado'); const pend = ps.filter(p => p.estado === 'Recibido');
+    const mesesPag = new Set(ver.map(p => p.periodo_mes ? String(p.periodo_mes).slice(0, 7) : null).filter(Boolean)); const mesesPend = new Set(pend.map(p => p.periodo_mes ? String(p.periodo_mes).slice(0, 7) : null).filter(Boolean));
+    const desde = String(x.fecha_alta || ymHoy).slice(0, 7); const debidos = x.estatus === 'Activo' ? mesesEntre(desde, ymHoy) : []; const adeudo = debidos.filter(m => !mesesPag.has(m));
+    const total = ver.reduce((a, p) => a + Number(p.monto), 0);
+    const estado = x.estatus !== 'Activo' ? 'Baja' : !ver.length ? (pend.length ? 'Por verificar' : 'Sin pagos') : adeudo.length ? 'Con adeudo' : 'Al corriente';
+    return { ...x, ver, pend, mesesPag, mesesPend, debidos, adeudo, total, estado, primer: ver[0]?.fecha_operacion || null, ultimo: ver.length ? ver[ver.length - 1].fecha_operacion : null };
+  });
+  const sinLigar = (pagos || []).filter(p => !p.afiliado_id);
+  panel.innerHTML = `<p class="small muted">Reportes calculados con los pagos <b>verificados</b>. Los meses debidos se cuentan desde el mes del alta en el Padrón hasta el mes en curso (un pago = un mes). Filtra por Sección o estado y descarga cada vista en Excel.</p>
+    <div class="fin-barra"><select id="r-vista"><option value="seccion">Resumen por Sección</option><option value="persona">Por persona (histórico de pagos)</option><option value="matriz">Matriz mes a mes</option><option value="mes">Cobrado por mes</option></select><select id="r-seccion">${opcionesSeccion(personas, R.seccion)}</select><select id="r-estado"><option value="">Todos los estados</option><option value="Al corriente">Al corriente</option><option value="Con adeudo">Con adeudo</option><option value="Por verificar">Por verificar</option><option value="Sin pagos">Sin pagos</option><option value="Baja">Baja</option></select><input type="text" id="r-texto" placeholder="Buscar persona" style="max-width:220px"><button class="btn secundario chico" id="r-excel" style="margin-left:auto">⬇ Excel de esta vista</button></div>
+    <div id="r-cuerpo"></div>${sinLigar.length ? `<p class="tiny mt-1" style="color:var(--ambar)">${sinLigar.length} pago(s) sin ligar al padrón (sin número de afiliado ni CURP reconocidos) no entran en estos reportes; están en Padrón financiero.</p>` : ''}`;
+  $('#r-vista').value = R.vista; $('#r-estado').value = R.estado;
+  let filasExcel = [], nombreExcel = '';
+  const filtrar = () => personas.filter(x => (!R.seccion || x.seccion === R.seccion) && (!R.estado || x.estado === R.estado) && (!R.texto || [x.nombre_completo, x.numero_afiliacion].join(' ').toLowerCase().includes(R.texto)));
+  const etiquetaEstado = e => `<span class="etiqueta ${e === 'Al corriente' ? 'verde' : e === 'Con adeudo' || e === 'Sin pagos' ? 'rojo' : e === 'Por verificar' ? 'amarillo' : ''}">${e}</span>`;
+  const pintar = () => {
+    const l = filtrar(); const c = $('#r-cuerpo');
+    if (R.vista === 'seccion') {
+      const grupos = new Map(); l.forEach(x => { if (!grupos.has(x.seccion)) grupos.set(x.seccion, []); grupos.get(x.seccion).push(x); });
+      const fila = (nombre, xs) => { const act = xs.filter(x => x.estatus === 'Activo'); const n = e => xs.filter(x => x.estado === e).length; const pagosN = xs.reduce((a, x) => a + x.ver.length, 0); const tot = xs.reduce((a, x) => a + x.total, 0); const esteMes = xs.filter(x => x.mesesPag.has(ymHoy)).length; const cobMes = xs.reduce((a, x) => a + x.ver.filter(p => String(p.periodo_mes || '').slice(0, 7) === ymHoy).reduce((b, p) => b + Number(p.monto), 0), 0); const adeudoMeses = xs.reduce((a, x) => a + x.adeudo.length, 0);
+        return { 'Sección': nombre, 'Afiliados activos': act.length, 'Al corriente': n('Al corriente'), 'Con adeudo': n('Con adeudo'), 'Por verificar': n('Por verificar'), 'Sin pagos': n('Sin pagos'), 'Bajas': n('Baja'), [`Pagados ${mesTexto(ymHoy)}`]: esteMes, [`% ${mesTexto(ymHoy)}`]: act.length ? Math.round(100 * esteMes / act.length) + '%' : '—', [`Cobrado ${mesTexto(ymHoy)}`]: cobMes, 'Pagos verificados (histórico)': pagosN, 'Cobrado total': tot, 'Meses adeudados (suma)': adeudoMeses, 'Adeudo estimado': adeudoMeses * Number(cfg.cuota_monto || 360) }; };
+      filasExcel = [...[...grupos.entries()].sort().map(([s, xs]) => fila(s, xs)), fila('TOTAL', l)]; nombreExcel = 'resumen-por-seccion';
+      const cols = Object.keys(filasExcel[0] || {});
+      c.innerHTML = `<div class="tabla-envoltura"><table class="tabla"><thead><tr>${cols.map(k => `<th>${esc(k)}</th>`).join('')}</tr></thead><tbody>${filasExcel.map(r => `<tr ${r['Sección'] === 'TOTAL' ? 'style="font-weight:700;background:#f6f6f6"' : ''}>${cols.map(k => `<td class="${typeof r[k] === 'number' ? 'num' : ''}">${/^Cobrado|^Adeudo/.test(k) ? dinero(r[k]) : esc(String(r[k]))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    } else if (R.vista === 'persona') {
+      filasExcel = l.map(x => ({ 'No. afiliado': x.numero_afiliacion, 'Persona': x.nombre_completo, 'Sección': x.seccion, 'Estatus': x.estatus, 'Alta en padrón': fecha(x.fecha_alta), 'Estado de cuotas': x.estado, 'Meses debidos': x.debidos.length, 'Meses pagados': x.mesesPag.size, 'Meses con adeudo': x.adeudo.map(mesTexto).join(', '), 'Primer pago': x.primer ? fecha(x.primer) : '', 'Último pago': x.ultimo ? fecha(x.ultimo) : '', 'Pagos verificados': x.ver.length, 'Total pagado': x.total, 'Por verificar': x.pend.length, 'Correo': x.correo || '', 'Teléfono': x.telefono || '' })); nombreExcel = 'por-persona';
+      c.innerHTML = `<div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No. afiliado</th><th>Persona</th><th>Sección</th><th>Alta</th><th>Estado de cuotas</th><th>Meses pagados / debidos</th><th>Adeuda</th><th>Primer · último pago</th><th>Total pagado</th></tr></thead><tbody>${l.length ? l.map(x => `<tr><td class="num">${x.numero_afiliacion}</td><td><b>${esc(x.nombre_completo)}</b><br><span class="tiny muted">${esc(x.correo || '')} · ${esc(x.telefono || '')}</span></td><td>${esc(x.seccion)}</td><td>${fecha(x.fecha_alta)}</td><td>${etiquetaEstado(x.estado)}${x.pend.length ? `<br><span class="tiny" style="color:var(--ambar)">${x.pend.length} por verificar</span>` : ''}</td><td class="num">${x.mesesPag.size} / ${x.debidos.length}</td><td class="small">${x.adeudo.length ? x.adeudo.map(mesTexto).join(', ') : '—'}</td><td class="small">${x.primer ? fecha(x.primer) + ' · ' + fecha(x.ultimo) : '—'}</td><td class="num">${dinero(x.total)}</td></tr>`).join('') : '<tr><td colspan="9" class="vacio">Nadie en este filtro.</td></tr>'}</tbody></table></div>`;
+    } else if (R.vista === 'matriz') {
+      const inicio = l.reduce((a, x) => { const d = String(x.fecha_alta || ymHoy).slice(0, 7); return d < a ? d : a; }, ymHoy); const meses = mesesEntre(inicio, ymHoy).slice(-12);
+      filasExcel = l.map(x => { const r = { 'No. afiliado': x.numero_afiliacion, 'Persona': x.nombre_completo, 'Sección': x.seccion }; meses.forEach(m => { r[mesTexto(m)] = x.mesesPag.has(m) ? 'PAGADO' : x.mesesPend.has(m) ? 'POR VERIFICAR' : x.debidos.includes(m) ? 'PENDIENTE' : ''; }); r['Total pagado'] = x.total; return r; }); nombreExcel = 'matriz-mes-a-mes';
+      c.innerHTML = `<div class="tabla-envoltura"><table class="tabla"><thead><tr><th>No.</th><th>Persona</th><th>Sección</th>${meses.map(m => `<th>${esc(mesTexto(m).slice(0, 3))} ${m.slice(2, 4)}</th>`).join('')}<th>Total</th></tr></thead><tbody>${l.length ? l.map(x => `<tr><td class="num">${x.numero_afiliacion}</td><td><b>${esc(x.nombre_completo)}</b></td><td class="small">${esc(x.seccion)}</td>${meses.map(m => `<td style="text-align:center">${x.mesesPag.has(m) ? '<span title="pagado" style="color:var(--verde);font-weight:700">✓</span>' : x.mesesPend.has(m) ? '<span title="por verificar" style="color:var(--ambar)">?</span>' : x.debidos.includes(m) ? '<span title="pendiente" style="color:var(--rojo)">✗</span>' : '<span class="muted">·</span>'}</td>`).join('')}<td class="num">${dinero(x.total)}</td></tr>`).join('') : `<tr><td colspan="${meses.length + 4}" class="vacio">Nadie en este filtro.</td></tr>`}</tbody></table></div><p class="tiny muted mt-1">✓ pagado · ? comprobante por verificar · ✗ pendiente · · antes de su alta. Se muestran los últimos 12 meses.</p>`;
+    } else {
+      const ids = new Set(l.map(x => x.id)); const pg = (pagos || []).filter(p => p.afiliado_id && ids.has(p.afiliado_id) && p.estado === 'Verificado'); const porMes = new Map();
+      pg.forEach(p => { const m = p.periodo_mes ? String(p.periodo_mes).slice(0, 7) : 'sin mes'; if (!porMes.has(m)) porMes.set(m, { n: 0, monto: 0, ops: new Set() }); const r = porMes.get(m); r.n++; r.monto += Number(p.monto); r.ops.add(String(p.fecha_operacion).slice(0, 7)); });
+      const activos = l.filter(x => x.estatus === 'Activo').length;
+      filasExcel = [...porMes.entries()].sort().map(([m, r]) => ({ 'Mes de la cuota': m === 'sin mes' ? 'Sin mes reconocido' : mesTexto(m), 'Pagos verificados': r.n, 'Afiliados activos': activos, '% cobrado': activos ? Math.round(100 * r.n / activos) + '%' : '—', 'Monto cobrado': r.monto })); nombreExcel = 'cobrado-por-mes';
+      c.innerHTML = filasExcel.length ? `<div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Mes de la cuota</th><th>Pagos verificados</th><th>Afiliados activos</th><th>% cobrado</th><th>Monto cobrado</th></tr></thead><tbody>${filasExcel.map(r => `<tr><td>${esc(r['Mes de la cuota'])}</td><td class="num">${r['Pagos verificados']}</td><td class="num">${r['Afiliados activos']}</td><td class="num">${r['% cobrado']}</td><td class="num">${dinero(r['Monto cobrado'])}</td></tr>`).join('')}<tr style="font-weight:700;background:#f6f6f6"><td>TOTAL</td><td class="num">${pg.length}</td><td></td><td></td><td class="num">${dinero(pg.reduce((a, p) => a + Number(p.monto), 0))}</td></tr></tbody></table></div>` : '<p class="small muted">Todavía no hay pagos verificados en este filtro.</p>';
+    }
+    $('#resumen').textContent = `Reportes · ${l.length} persona(s)${R.seccion ? ' · ' + R.seccion : ''}`;
+  };
+  $('#r-vista').onchange = e => { R.vista = e.target.value; guardar('fin_rep_vista', R.vista); pintar(); };
+  $('#r-seccion').onchange = e => { R.seccion = e.target.value; pintar(); };
+  $('#r-estado').onchange = e => { R.estado = e.target.value; pintar(); };
+  $('#r-texto').oninput = e => { R.texto = e.target.value.toLowerCase(); pintar(); };
+  $('#r-excel').onclick = () => excelDe(filasExcel, nombreExcel, `reporte-${nombreExcel}${R.seccion ? '-' + R.seccion.replace(/\W+/g, '-') : ''}-${hoy()}.xlsx`, { 'Meses con adeudo': 40, 'Sección': 20 });
+  pintar();
 }
 
 // ===================== Carta de bienvenida AF-09 =====================
