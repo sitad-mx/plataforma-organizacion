@@ -78,7 +78,7 @@ async function asambleas() {
   panel.innerHTML = '<p class="cargando">Cargando…</p>';
   const { data, error } = await sb.from('v_asambleas').select('*').order('fecha', { ascending: false });
   if (error) { panel.innerHTML = `<div class="aviso error">${esc(error.message)}</div>`; return; }
-  panel.innerHTML = `<div class="acciones" style="margin:0 0 1rem">${esOrg ? `<a class="btn" href="${ROOT}asambleas/">Convocar una asamblea</a>` : ''}<span class="small muted">Ordinarias en abril y octubre; extraordinarias cuando hay un plazo o un riesgo. La plataforma fija el corte del padrón tres días antes, verifica la anticipación de la convocatoria, registra la asistencia con el gafete (QR) o por nombre y calcula el quórum.</span></div>
+  panel.innerHTML = `<div class="acciones" style="margin:0 0 1rem">${esOrg ? `<a class="btn" href="${ROOT}asambleas/">Convocar una asamblea</a>` : ''}<span class="small muted">Ordinarias en abril y octubre; extraordinarias cuando hay un plazo o un riesgo. La plataforma fija el corte del padrón tres días antes, verifica la anticipación de la convocatoria, registra la asistencia buscando a cada persona en la lista del padrón (se identifica con identificación oficial y muestra su gafete) y calcula el quórum.</span></div>
     <div class="tabla-envoltura"><table class="tabla"><thead><tr><th>Fecha</th><th>Asamblea</th><th>Estado</th><th>Padrón al corte</th><th>Asistencia</th></tr></thead><tbody>${data.length ? data.map(filaAsamblea).join('') : '<tr><td colspan="5" class="vacio">Tu Sección no tiene asambleas registradas.</td></tr>'}</tbody></table></div>`;
   $$('#panel tr.clic').forEach(tr => tr.onclick = () => location.href = `${ROOT}asambleas/?id=${tr.dataset.as}`);
 }
