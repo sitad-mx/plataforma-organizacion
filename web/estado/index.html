@@ -58,8 +58,7 @@ async function consultar() {
     { t: 'Solicitud recibida', f: x.fecha_recepcion, ok: true },
     ...(x.fecha_prevencion ? [{ t: 'La Secretaría te pidió documentos (prevención)', f: x.fecha_prevencion, ok: true, extra: x.limite_subsanacion ? `Fecha límite para subirlos: ${fechaLarga(x.limite_subsanacion)}` : '' }] : []),
     { t: x.sentido === 'Desfavorable' ? 'Dictamen desfavorable' : 'Revisión y dictamen de la Secretaría de Organización', f: x.fecha_dictamen, ok: !!x.fecha_dictamen },
-    { t: 'Autorización del Secretario General', f: null, ok: ['Autorizada', 'Ejecutada en padrón'].includes(x.estado) },
-    { t: 'Alta en el Padrón de Afiliados', f: x.fecha_alta, ok: !!x.fecha_alta },
+    { t: 'Alta en el Padrón de Afiliados (con el dictamen favorable)', f: x.fecha_alta, ok: !!x.fecha_alta },
     ...(x.fecha_alta ? [{ t: 'Entrega de tu credencial en la oficina de tu Sección', f: datos?.entrega_at ? String(datos.entrega_at).slice(0, 10) : null, ok: !!datos?.entrega_at }] : []),
   ];
   res.innerHTML = `

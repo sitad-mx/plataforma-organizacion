@@ -19,7 +19,7 @@
 import { sb, $, esc, toast, param, armazon, requerirRol, fecha, fechaLarga, fechaHoraLarga, hoy, dinero, DOCS, DOC_CORTO, docsRequeridos, ROOT, CFG } from './assets/app.js';
 const tipo = param('tipo'), id = param('id'), f = param('f'), c = param('c'), t = param('t'); const doc = $('#doc');
 // Público: la persona descarga sus formatos prellenados (folio + correo) o, ya aceptada, su Constancia y su gafete (clave secreta de su registro)
-const publico = (['solicitud', 'cedula'].includes(tipo) && f && c) || (['constancia', 'gafete'].includes(tipo) && t);
+const publico = (['solicitud', 'cedula'].includes(tipo) && f && c) || (['constancia', 'gafete', 'comprobante'].includes(tipo) && t);
 let p = null;
 if (!publico) { p = await requerirRol(['cen_organizacion', 'cen_lectura', 'sg', 'finanzas', 'seccion_organizacion', 'seccion_sg']); if (!p) throw new Error('sin acceso'); }
 await armazon({ titulo: 'Documento' });
