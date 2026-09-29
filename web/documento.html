@@ -167,7 +167,7 @@ async function anexo14(x, cfg) {
     <div class="panel br"><div class="imprime">IMPRIME TU GAFETE CON ANTICIPACIÓN PARA INGRESAR DIRECTO AL ÁREA DEL EVENTO</div><ol class="pasos"><li>Imprime tu gafete en una hoja tamaño carta y dobla por la mitad dejando tu información en la cara externa.</li><li>Dobla nuevamente la hoja dejando una sola cara de frente.</li><li>Presenta este gafete en la entrada del salón del evento.</li></ol></div>
   </div>`;
   const { toCanvas } = await import('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm');
-  toCanvas($('#qr'), `${ROOT}verificar/?t=${x.credencial_qr_token}`, { width: 160, margin: 0, color: { dark: '#171717' } }); // la página de verificación abre los Documentos Básicos y la mesa de registro lo lee para el check-in
+  toCanvas($('#qr'), liga, { width: 160, margin: 0, color: { dark: '#171717' } }); // instrucción de Manuel (28-sep-2026): el QR del gafete abre DIRECTO la carpeta oficial de los Documentos Básicos. El check-in por QR en la mesa de registro se hace con la credencial (verificar/?t=), no con el gafete.
 }
 
 // ===================== AF-09 · Carta de Finanzas =====================

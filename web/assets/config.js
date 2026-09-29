@@ -11,7 +11,7 @@ export const DOMICILIO = 'C. Antonio Ancona No. 1, Interior 3, Col. Cuajimalpa, 
 export const CORREO_ORGANIZACION = 'sitadorganizacion@gmail.com'; // buzón operativo de la Secretaría de Organización del CEN (decisión de Manuel 24-sep-2026)
 export const CORREO_COPIA = 'enlace@sindicatodigital.org';       // buzón institucional único del sindicato: va en copia en todo correo a la persona
 export const LUGAR_EXPEDICION = 'Ciudad de México';
-export const LIGA_DOCUMENTOS_BASICOS = 'https://drive.google.com/drive/folders/1xr1K4I2Cij4UK3G6_bNN73I2FU2wXLVj'; // carpeta del SG (QR del gafete Anexo 14)
+export const LIGA_DOCUMENTOS_BASICOS = 'https://drive.google.com/drive/folders/1xqUgf1w149hNNBluRc0gvyftzAiqy3Q-?usp=drive_link'; // liga OFICIAL de los Documentos Básicos (Manuel, 28-sep-2026): correos, consulta, constancia y QR del gafete Anexo 14. La tabla configuracion (clave liga_documentos_basicos) trae la misma.
 export const CORREO_FINANZAS = 'enlace@sindicatodigital.org';
 export const TELEFONO_CONTACTO = '55 21 623 756';
 export const DOMICILIO_SG = 'Antonio Ancona 1, Piso 3, Col. Cuajimalpa, CP 05000, Cuajimalpa de Morelos, CDMX'; // tal como lo escriben los anexos del SG
