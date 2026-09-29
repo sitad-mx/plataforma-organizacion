@@ -160,7 +160,19 @@ table.tabla td.num { text-align: right; font-variant-numeric: tabular-nums; }
 /* ===== Ficha (dos columnas) ===== */
 .ficha { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 /* En pantalla ancha las dos columnas de la ficha se desplazan por separado (petición de Manuel 28-sep) */
-@media (min-width: 900px) { .ficha { grid-template-columns: 1.6fr 1fr; align-items: stretch; position: sticky; top: .5rem; height: calc(100vh - 1rem); } .ficha > div { overflow-y: auto; max-height: 100%; padding-right: .35rem; scrollbar-width: thin; } .ficha .lateral { position: static; } }
+@media (min-width: 900px) {
+  .ficha { grid-template-columns: 1.6fr 1fr; align-items: stretch; position: sticky; top: .5rem; height: calc(100vh - 1rem); }
+  .ficha > div { overflow-y: auto; max-height: 100%; padding-right: .35rem; scrollbar-width: thin; }
+  .ficha .lateral { position: static; }
+  /* Columna del expediente: NO se desplaza; el documento activo ocupa todo el alto y solo se desplaza el propio documento */
+  .ficha > div:first-child { overflow: hidden; display: flex; flex-direction: column; }
+  .tarjeta.expediente { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: .7rem 1rem; }
+  .tarjeta.expediente .visor { flex: 1; min-height: 0; }
+  .visor-doc.activo { height: 100%; }
+  .visor-doc .visor-cuerpo { flex: 1; min-height: 0; }
+  .visor-doc iframe { height: 100%; }
+  .visor-doc img { max-height: 100%; object-fit: contain; }
+}
 dl.datos { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 0; }
 dl.datos dt { color: var(--apoyo); font-size: .85rem; }
 dl.datos dd { margin: 0; }
@@ -288,19 +300,35 @@ dl.datos dd { margin: 0; }
 .ranura-botones { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
 .ranura-botones .btn { cursor: pointer; }
 /* Visor de expediente (CEN / Sección) */
-.visor { display: grid; gap: 1rem; }
-.visor-doc { border: 1px solid var(--linea); border-radius: var(--radio); background: var(--blanco); overflow: hidden; }
+.visor { display: block; }
+.visor-doc { border: 1px solid var(--linea); border-radius: var(--radio); background: var(--blanco); overflow: hidden; display: none; }
+.visor-doc.activo { display: flex; flex-direction: column; }
+.exp-cab { display: flex; align-items: baseline; flex-wrap: wrap; gap: .3rem; }
+.visor-tabs { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; margin: .45rem 0; }
+.visor-tabs button[data-tab] { border: 1px solid var(--linea); background: #fff; border-radius: 999px; padding: .22rem .7rem; font: inherit; font-size: .8rem; cursor: pointer; display: inline-flex; align-items: center; gap: .35rem; }
+.visor-tabs button[data-tab].activo { background: var(--carbon); color: #fff; border-color: var(--carbon); }
+.visor-tabs .visor-nav { margin-left: auto; display: inline-flex; gap: .2rem; }
 .visor-doc .visor-cab { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .6rem .9rem; background: var(--fondo); border-bottom: 1px solid var(--linea); }
-.visor-doc .visor-revisa { padding: .45rem .9rem; background: #fff8e6; border-bottom: 1px solid var(--linea); font-size: .8rem; line-height: 1.5; display: flex; flex-wrap: wrap; gap: .2rem .9rem; }
+.visor-doc .visor-revisa { padding: .25rem .9rem; background: #fff8e6; border-bottom: 1px solid var(--linea); font-size: .78rem; line-height: 1.4; }
+.visor-doc .visor-revisa summary { cursor: pointer; }
+.visor-doc .visor-revisa > div { display: flex; flex-wrap: wrap; gap: .1rem .8rem; padding: .2rem 0 .1rem; }
+.visor-doc .visor-cab { flex-wrap: nowrap; padding: .4rem .9rem; }
+.visor-doc .visor-titulo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.visor-doc .visor-cab > span:last-child { flex: 0 0 auto; display: inline-flex; gap: .2rem; }
+.visor-doc [data-vista].activo { background: var(--carbon); color: #fff; }
+.visor-doc .visor-cuerpo { overflow: hidden; }
+.visor-doc.activo .visor-cuerpo { align-items: stretch; }
+.visor-doc.activo .visor-cuerpo iframe { flex: 1; min-height: 0; height: 100%; }
+.visor-doc.activo .visor-cuerpo img { max-height: 100%; }
 .visor-doc .visor-revisa b { color: var(--rojo); }
-.visor-doc .visor-preval { padding: .5rem .9rem; font-size: .82rem; line-height: 1.5; border-top: 1px solid var(--linea); }
+.visor-doc .visor-preval { padding: .3rem .9rem; font-size: .8rem; line-height: 1.4; border-bottom: 1px solid var(--linea); }
 .visor-doc .visor-preval.ok { background: #eef8ef; }
 .visor-doc .visor-preval.obs { background: #fff1e6; }
 .visor-doc .visor-cuerpo { min-height: 240px; display: flex; align-items: center; justify-content: center; background: #2b2b2b; }
 .visor-doc img { max-width: 100%; max-height: 70vh; display: block; }
 .visor-doc iframe { width: 100%; height: 70vh; border: 0; background: #fff; }
-.visor-doc .visor-pie { padding: .6rem .9rem; display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
-.visor-doc .visor-pie textarea { min-height: 56px; flex: 1 1 260px; }
+.visor-doc .visor-pie { padding: .45rem .9rem; display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; border-top: 1px solid var(--linea); }
+.visor-doc .visor-pie textarea { min-height: 0; flex: 1 1 220px; padding: .35rem .5rem; font-size: .85rem; }
 .btn.wa { background: #25D366; border-color: #25D366; color: #fff; }
 .btn.wa:hover { background: #1ebe5a; }
 .etiqueta.novedad { background: #FFE8A3; color: #6B4E00; }

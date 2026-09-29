@@ -25,6 +25,8 @@ await armazon(esSeccion ? { titulo: p.secciones ? p.secciones.denominacion : 'Se
 $('#volver').href = esSeccion ? ROOT + 'seccion/' : ROOT + 'cen/?p=solicitudes'; // la bandeja restaura los filtros y la posición que se dejaron
 const esOrg = p.rol === 'cen_organizacion'; const esSecOrg = p.rol === 'seccion_organizacion'; const puedeSubir = esOrg || esSecOrg; const revisa = esOrg || esSecOrg; const id = param('id'); const vista = $('#vista');
 let s, docs, pad, correoSG = '', cfg = {}, segs = [], envios = [];
+const vistaPdf = () => { try { return localStorage.getItem('visor_vista') || 'Fit'; } catch { return 'Fit'; } }; // Fit = página completa (default) · FitH = ancho
+let docActivo = null; // documento que se está viendo (tipo|parte); se conserva al marcar correcto / guardar observación
 const dd = (k, val) => `<dt>${k}</dt><dd>${val == null || val === '' ? '—' : val}</dd>`;
 // Qué se revisa en cada documento (lista de Manuel, 28-sep-2026; lo demás son cruces de apoyo). Se muestra en cada tarjeta para quien revise.
 const REVISAR = {
@@ -37,7 +39,7 @@ const REVISAR = {
   poliza: ['Legible y vigente', 'A nombre de la persona o del vehículo que declara'],
   licencia: ['Legible y vigente', 'Es de la persona solicitante'],
 };
-const revisaHtml = tipo => (REVISAR[tipo] || []).length ? `<div class="visor-revisa"><b>Qué revisar:</b> ${REVISAR[tipo].map(t => `<span>☐ ${esc(t)}</span>`).join('')}</div>` : '';
+const revisaHtml = tipo => (REVISAR[tipo] || []).length ? `<details class="visor-revisa"><summary><b>Qué revisar</b> <span class="tiny muted">(${REVISAR[tipo].length} puntos · clic para ver)</span></summary><div>${REVISAR[tipo].map(t => `<span>☐ ${esc(t)}</span>`).join('')}</div></details>` : '';
 const quienEnvio = e => e ? `${esc((e.enviado_por_nombre || e.enviado_por_email || '').split(' ')[0])} · ${fecha(e.enviado_at)} · ${e.medio}` : '';
 const enviar = (titulo, tel, correo, asunto, cuerpoCorreo, cuerpoWa, cc, paso) => { const e = paso ? envios.find(x => x.paso === paso) : null; return `<div class="envio"><span class="small"><b>${titulo}</b>${e ? ` <span class="etiqueta verde">✓ enviado: ${quienEnvio(e)}</span>` : ' <span class="etiqueta">sin enviar</span>'}</span> <a class="btn wa chico" href="${whatsapp(tel, cuerpoWa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''} ${paso ? `data-envio="${paso}|whatsapp"` : ''}>WhatsApp</a> <a class="btn secundario chico" href="${mailto(correo, asunto, cuerpoCorreo, cc)}" ${paso ? `data-envio="${paso}|correo"` : ''}>Correo</a> <button type="button" class="btn discreto chico" data-copiar-html="${encodeURIComponent(cuerpoCorreo)}" title="Copia el texto con párrafos y ligas clicables; pégalo (Ctrl+V) en el cuerpo del correo en Outlook">📋 Copiar con formato</button></div>`; };
 await cargar();
@@ -67,6 +69,8 @@ function render() {
   const req = docsRequeridos(s.actividad_transporte);
   const existentes = {}; docs.forEach(d => existentes[d.tipo + '|' + (d.parte || '')] = d);
   const presente = d => d.partes ? (!!existentes[d.tipo + '|'] || d.partes.every(([pt]) => existentes[d.tipo + '|' + pt])) : !!existentes[d.tipo + '|'];
+  const fichasDoc = req.flatMap(d => (d.partes && !existentes[d.tipo + '|'] ? d.partes : [[null, d.partes ? 'ambos lados en un archivo' : null]]).map(([pt, nombrePt]) => ({ d, pt, nombrePt, x: existentes[d.tipo + '|' + (pt || '')], clave: d.tipo + '|' + (pt || '') })));
+  if (!fichasDoc.some(f => f.clave === docActivo)) docActivo = (fichasDoc.find(f => f.x) || fichasDoc[0] || {}).clave || null;
   const resumen = req.map(d => { const partes = d.partes && !existentes[d.tipo + '|'] ? d.partes.map(([pt, n]) => [existentes[d.tipo + '|' + pt], n]) : [[existentes[d.tipo + '|'], null]];
     return partes.map(([x, n]) => { const nombre = d.corto + (n ? ' · ' + n.toLowerCase() : '');
       if (!x) return `<span class="etiqueta rojo">✘ ${esc(nombre)}: falta</span>`;
@@ -77,7 +81,8 @@ function render() {
   const alertas = [];
   if (s.con_novedad) alertas.push('NOVEDAD: la persona o la Sección subió documentos después de la última revisión. Revísalos y marca "Revisado".');
   if (s.es_confianza) alertas.push('La persona declaró desempeñar funciones de confianza. Verifica antes de dictaminar: los trabajadores de confianza legalmente excluidos no pueden afiliarse.');
-  if (s.duplicado) alertas.push('Posible duplicado: hay otra solicitud viva o un afiliado activo con la misma CURP o el mismo correo. Si es la misma persona, no se abre nuevo trámite: responde indicando el folio existente.');
+  if (s.duplicado) alertas.push('DUPLICADO: hay otra solicitud viva o un afiliado activo con la misma CURP. Si es la misma persona, no se abre nuevo trámite: responde indicando el folio existente.');
+  if (s.correo_compartido) alertas.push(`Comparte el correo (${s.correo}) con: ${s.correo_compartido}. No es un duplicado: es un correo de contacto usado por más de una persona (p. ej. la enlace que envió los expedientes). Los mensajes a esta persona llegan a ese buzón.`);
   if (!s.documentos_completos && !cerrada) alertas.push(`Expediente incompleto: faltan ${faltan.map(d => d.corto).join(', ')}.`);
   if (s.fuera_de_plazo) alertas.push('Esta solicitud está fuera del plazo estatutario. Atiéndela hoy.');
   const env = k => envios.find(e => e.paso === k);
@@ -97,60 +102,27 @@ function render() {
       <p class="small mb-0">📱 ${esc(tel || 'sin teléfono')} ${tel ? `<a class="btn wa chico" href="${whatsapp(tel, 'Hola, ' + s.nombre_completo.split(' ')[0] + '. Te escribimos de la Secretaría de Organización del SITAD sobre tu solicitud de afiliación, folio ' + s.folio + '.')}" target="_blank">WhatsApp</a>` : ''} · ✉ <a href="${mailto(s.correo, 'SITAD · Folio ' + s.folio, '')}">${esc(s.correo)}</a></p></div>
     <div class="small muted" style="text-align:right">Recibida el ${fechaLarga(s.fecha_recepcion)}<br>Límite para dictaminar: <b>${fecha(s.limite_dictamen)}</b>${s.limite_ejecucion ? `<br>Límite para ejecutar el alta: <b>${fecha(s.limite_ejecucion)}</b>` : ''}${s.asamblea_fecha_hora ? `<br>Asamblea constitutiva: <b>${esc(fechaHoraLarga(s.asamblea_fecha_hora))}</b>` : ''}</div>
   </div>
-  ${alertas.map(a => `<div class="aviso ${/fuera del plazo|duplicado|confianza/.test(a) ? 'error' : /NOVEDAD/.test(a) ? '' : 'atencion'} small">${esc(a)}</div>`).join('')}
+  ${alertas.map(a => `<div class="aviso ${/fuera del plazo|DUPLICADO|confianza/.test(a) ? 'error' : /NOVEDAD|Comparte el correo/.test(a) ? '' : 'atencion'} small">${esc(a)}</div>`).join('')}
 
   <div class="tarjeta mt-2" style="padding:.8rem 1rem;line-height:2"><b class="small">Expediente (${req.filter(presente).length} de ${req.length}):</b> ${resumen} <span class="tiny muted">· Cada documento se valida abajo con "Marcar correcto"; queda quién lo validó y cuándo.</span><br><b class="small">Mensajes:</b> ${comunicacion}</div>
   <div class="ficha mt-2">
     <div>
-      <div class="tarjeta">
-        <h3>Expediente (${req.filter(presente).length} de ${req.length}) <span class="tiny muted">· se revisa aquí mismo, documento por documento</span></h3>
-        <p class="small muted">Formatos prellenados con los datos capturados: <a href="${ROOT}documento.html?tipo=solicitud&${q}" target="_blank">Anexo 12 y 13</a> · <a href="${ROOT}documento.html?tipo=cedula&${q}" target="_blank">Anexo 23</a>.</p>
-        <div class="aviso small" style="margin:0 0 .8rem"><b>Cómo se revisa (criterios de la Secretaría de Organización, 28-sep-2026).</b> Cada documento trae abajo su lista "Qué revisar"; eso es lo obligatorio. Además, en todo el expediente: <b>el nombre y la CURP deben ser idénticos</b> en INE, CURP, constancia fiscal, solicitud y cédula; <b>la firma debe ser a mano, con tinta azul e igual a la de la INE</b> en la solicitud y en el aviso; y el <b>patrón</b> debe ser REEDCAM o una plataforma digital, o venir en blanco (instrucción del Secretario General, 28-sep-2026): si declara un patrón que no tiene nada que ver, se rebota con el mensaje "Error en el llenado del formulario" y se avisa al SG. NSS, fecha de ingreso y antigüedad de la constancia fiscal <b>no</b> son causa de rechazo.</div>
-        <div class="visor" id="visor">${req.map(d => (d.partes && !existentes[d.tipo + '|'] ? d.partes : [[null, d.partes ? 'ambos lados en un archivo' : null]]).map(([pt, nombrePt]) => { const x = existentes[d.tipo + '|' + (pt || '')]; const titulo = esc(d.nombre) + (nombrePt ? ' · ' + esc(nombrePt) : ''); return `
-          <div class="visor-doc" data-docid="${x ? x.id : ''}" data-tipo="${d.tipo}" data-parte="${pt || ''}">
-            <div class="visor-cab"><span><span class="punto ${x ? (x.validado === false ? 'amarillo' : x.validado ? 'verde' : 'azul') : 'rojo'}"></span><b>${titulo}</b>${x ? `<span class="tiny muted"> · ${esc(x.nombre_archivo || '')} · ${fecha(x.created_at)}</span>` : ' <span class="tiny rojo">Falta</span>'}</span>
-              <span>${x ? `<a href="#" class="btn discreto chico" data-abrir="${x.id}">Abrir en pestaña</a>` : ''}${puedeSubir && abierta ? `<label class="btn discreto chico" style="cursor:pointer">${x ? 'Reemplazar' : 'Subir'}<input type="file" class="oculto" data-subir="${d.tipo}" data-parte="${pt || ''}" accept="application/pdf,image/jpeg,image/png"></label>` : ''}</span></div>
+      <div class="tarjeta expediente">
+        <div class="exp-cab"><a class="tiny" href="${esSeccion ? ROOT + 'seccion/' : ROOT + 'cen/?p=solicitudes'}">← Bandeja</a> <b>${esc(s.folio)} · ${esc(s.nombre_completo)}</b> <span class="tiny muted">· ${req.filter(presente).length} de ${req.length} documentos · un documento a la vez; con las pestañas cambias de documento</span>
+          <details class="tiny" style="display:inline-block;margin-left:.5rem"><summary style="cursor:pointer;color:var(--rojo)">Criterios de revisión</summary><div class="aviso small" style="margin:.4rem 0 0;max-width:640px"><b>Criterios de la Secretaría de Organización (28-sep-2026).</b> Cada documento trae su lista "Qué revisar"; eso es lo obligatorio. En todo el expediente: <b>nombre y CURP idénticos</b> en INE, CURP, constancia fiscal, solicitud y cédula; <b>firma a mano, con tinta azul e igual a la de la INE</b> en la solicitud y en el aviso; <b>patrón</b> REEDCAM o plataforma digital, o en blanco (si es ajeno: "Error en el llenado del formulario" y se avisa al SG). NSS, fecha de ingreso y antigüedad de la constancia fiscal <b>no</b> son causa de rechazo. Formatos prellenados: <a href="${ROOT}documento.html?tipo=solicitud&${q}" target="_blank">Anexo 12 y 13</a> · <a href="${ROOT}documento.html?tipo=cedula&${q}" target="_blank">Anexo 23</a>.</div></details></div>
+        <div class="visor-tabs">${fichasDoc.map((f, n) => `<button type="button" data-tab="${f.clave}" class="${f.clave === docActivo ? 'activo' : ''}"><span class="punto ${f.x ? (f.x.validado === false ? 'amarillo' : f.x.validado ? 'verde' : 'azul') : 'rojo'}"></span>${n + 1}. ${esc(f.d.corto)}${f.nombrePt ? ' · ' + esc(f.nombrePt) : ''}${f.x ? '' : ' (falta)'}</button>`).join('')}<span class="visor-nav"><button type="button" class="btn discreto chico" data-tabnav="-1">‹ Anterior</button><button type="button" class="btn discreto chico" data-tabnav="1">Siguiente ›</button></span></div>
+        <div class="visor" id="visor">${fichasDoc.map(({ d, pt, nombrePt, x, clave }) => { const titulo = esc(d.nombre) + (nombrePt ? ' · ' + esc(nombrePt) : ''); return `
+          <div class="visor-doc ${clave === docActivo ? 'activo' : ''}" data-clave="${clave}" data-docid="${x ? x.id : ''}" data-tipo="${d.tipo}" data-parte="${pt || ''}">
+            <div class="visor-cab"><span class="visor-titulo" title="${x ? esc(x.nombre_archivo || '') + ' · ' + fecha(x.created_at) : ''}"><span class="punto ${x ? (x.validado === false ? 'amarillo' : x.validado ? 'verde' : 'azul') : 'rojo'}"></span><b>${titulo}</b>${x ? '' : ' <span class="tiny rojo">Falta</span>'}</span>
+              <span>${x ? `<button type="button" class="btn discreto chico" data-vista="Fit">Página completa</button><button type="button" class="btn discreto chico" data-vista="FitH">Ancho</button><a href="#" class="btn discreto chico" data-abrir="${x.id}">Abrir en pestaña</a>` : ''}${puedeSubir && abierta ? `<label class="btn discreto chico" style="cursor:pointer">${x ? 'Reemplazar' : 'Subir'}<input type="file" class="oculto" data-subir="${d.tipo}" data-parte="${pt || ''}" accept="application/pdf,image/jpeg,image/png"></label>` : ''}</span></div>
             ${revisaHtml(d.tipo)}
-            ${x ? `<div class="visor-cuerpo" data-ver="${x.id}"><span class="cargando" style="color:#ddd">Cargando documento…</span></div>` : ''}
             ${x && !x.prevalidacion && x.prevalidacion_nota ? `<div class="visor-preval"><b>Prerrevisión:</b> pendiente — ${esc(x.prevalidacion_nota)}</div>` : ''}
-            ${x && x.prevalidacion ? `<div class="visor-preval ${x.prevalidacion === 'correcto' ? 'ok' : 'obs'}"><b>Prerrevisión (${esc(x.prevalidacion_por || 'Claude')}${x.prevalidacion_at ? ' · ' + fecha(x.prevalidacion_at) : ''}):</b> ${x.prevalidacion === 'correcto' ? '✓ sugiere marcar CORRECTO' : '⚠ sugiere OBSERVACIÓN'}${x.prevalidacion_nota ? ' — ' + esc(x.prevalidacion_nota) : ''} ${x.validado === true ? '<span class="etiqueta verde">confirmado</span>' : (x.validado === false && x.observacion) ? '<span class="etiqueta amarillo">observación guardada</span>' : '<span class="etiqueta">pendiente de tu confirmación</span>'}</div>` : ''}
-            ${x && revisa && abierta ? `<div class="visor-pie"><button class="btn ${x.validado ? 'verde' : 'secundario'} chico" data-ok="${x.id}">${x.validado ? '✓ Correcto' : (x.prevalidacion === 'correcto' ? 'Confirmar: marcar correcto' : 'Marcar correcto')}</button><textarea data-obs="${x.id}" placeholder="Observación para la persona (qué está mal y cómo debe venir). Se muestra en su consulta y entra en el seguimiento.">${esc(x.observacion || (x.prevalidacion === 'observacion' ? x.prevalidacion_nota || '' : ''))}</textarea><button class="btn secundario chico" data-guardar-obs="${x.id}">${!x.observacion && x.prevalidacion === 'observacion' ? 'Confirmar: guardar observación' : 'Guardar observación'}</button></div>` : x && x.observacion ? `<div class="visor-pie small" style="color:var(--ambar)"><b>Observación:</b> ${esc(x.observacion)}</div>` : ''}
-          </div>`; }).join('')).join('')}</div>
-        ${s.expediente_url ? `<p class="small mt-2">Expediente definitivo en Drive: <a href="${esc(s.expediente_url)}" target="_blank">${esc(s.expediente_url)}</a></p>` : ''}
+            ${x && x.prevalidacion ? `<div class="visor-preval ${x.prevalidacion === 'correcto' ? 'ok' : 'obs'}"><b>Prerrevisión${x.prevalidacion_at ? ' ' + fecha(x.prevalidacion_at) : ''}:</b> ${x.prevalidacion === 'correcto' ? '✓ sugiere CORRECTO' : '⚠ sugiere OBSERVACIÓN'} ${x.validado === true ? '<span class="etiqueta verde">confirmado</span>' : (x.validado === false && x.observacion) ? '<span class="etiqueta amarillo">observación guardada</span>' : '<span class="etiqueta">pendiente de tu confirmación</span>'}${x.prevalidacion_nota ? ` <details style="display:inline"><summary style="display:inline;cursor:pointer;color:var(--rojo)">ver nota</summary> ${esc(x.prevalidacion_nota)}</details>` : ''}</div>` : ''}
+            ${x ? `<div class="visor-cuerpo" data-ver="${x.id}"><span class="cargando" style="color:#ddd">Cargando documento…</span></div>` : '<div class="visor-cuerpo"><span class="small" style="color:#ddd">No se ha recibido este documento.</span></div>'}
+            ${x && revisa && abierta ? `<div class="visor-pie"><button class="btn ${x.validado ? 'verde' : 'secundario'} chico" data-ok="${x.id}">${x.validado ? '✓ Correcto' : (x.prevalidacion === 'correcto' ? 'Confirmar: marcar correcto' : 'Marcar correcto')}</button><textarea rows="1" data-obs="${x.id}" placeholder="Observación para la persona (qué está mal y cómo debe venir)">${esc(x.observacion || (x.prevalidacion === 'observacion' ? x.prevalidacion_nota || '' : ''))}</textarea><button class="btn secundario chico" data-guardar-obs="${x.id}">${!x.observacion && x.prevalidacion === 'observacion' ? 'Confirmar: guardar observación' : 'Guardar observación'}</button></div>` : x && x.observacion ? `<div class="visor-pie small" style="color:var(--ambar)"><b>Observación:</b> ${esc(x.observacion)}</div>` : ''}
+          </div>`; }).join('')}</div>
+        ${s.expediente_url ? `<p class="tiny mb-0">Expediente definitivo en Drive: <a href="${esc(s.expediente_url)}" target="_blank">${esc(s.expediente_url)}</a></p>` : ''}
       </div>
-
-      <div class="tarjeta">
-        <h3>Datos capturados <span class="tiny muted">(Anexo 23 y manifestación)</span></h3>
-        <dl class="datos">
-          ${dd('CURP · RFC', esc(s.curp || '—') + ' · ' + esc(s.rfc || '—'))}${dd('Nacimiento · género · estado civil', fecha(s.fecha_nacimiento) + ' · ' + esc(s.genero || '—') + ' · ' + esc(s.estado_civil || '—'))}
-          ${dd('Domicilio', [s.domicilio, s.colonia, s.cp ? 'C.P. ' + s.cp : '', s.municipio, s.estado_domicilio].filter(Boolean).map(esc).join(', '))}
-          ${dd('Seguridad social', 'NSS ' + esc(s.nss || '—') + ' · ' + esc(s.unidad_medica || '—') + (s.unidad_medica_ciudad ? ', ' + esc(s.unidad_medica_ciudad) : ''))}
-          ${dd('Situación profesional', esc(s.escolaridad || '—') + (s.escolaridad_estado ? ' (' + esc(s.escolaridad_estado) + ')' : '') + ' · ' + esc(s.carrera || '—'))}
-          ${dd('Empresa', esc(s.empresa) + ' · ' + esc(s.puesto || '—') + (s.fecha_inicio_relacion ? ' · ingreso ' + fecha(s.fecha_inicio_relacion) : '') + ' · ' + esc(s.frecuencia_pago || '—'))}
-          ${dd('Domicilio fiscal · contacto', esc(s.domicilio_fiscal || '—') + ' · ' + esc(s.telefono_empresa || '—') + ' · ' + esc(s.jefe_laboral || '—'))}
-          ${dd('Seguro del instrumento', esc(s.seguro_aseguradora || '—') + ' · ' + esc(s.seguro_poliza || '—') + ' · ' + esc(s.seguro_vigencia || '—'))}
-          ${dd('Cónyuge', s.conyuge_nombre ? esc(s.conyuge_nombre) + ' · ' + esc(s.conyuge_domicilio || '') + ' · ' + esc(s.conyuge_telefono || '') : 'No aplica')}
-          ${dd('Dependientes', dep.length ? dep.map(x => esc(x.nombre) + ' (' + esc(x.parentesco || '') + (x.edad != null ? ', ' + x.edad + ' años' : '') + ')').join('; ') : 'No aplica')}
-          ${dd('Manifestación', 'Se identifica con ' + esc(s.identificacion_tipo || '—') + ' · patrón ' + esc(s.patron || '—') + ' · firma en ' + esc(s.ciudad_firma || '—'))}
-          ${dd('Declaraciones', (s.acepta_estatuto ? 'Acepta Estatutos y Documentos Básicos (' + fecha(s.acepta_estatuto_at) + ')' : '<span class="rojo">NO aceptó los Estatutos</span>') + ' · ' + (s.es_confianza ? '<span class="rojo">declara funciones de confianza</span>' : 'no es de confianza') + ' · aviso de privacidad ' + (s.aviso_privacidad_at ? fecha(s.aviso_privacidad_at) : '—') + ' · ' + (s.actividad_transporte ? 'transporte de pasajeros / última milla' : 'no es transporte'))}
-        </dl>
-        ${esOrg && !cerrada ? `<div class="acciones"><button class="btn discreto chico" id="a-transporte">${s.actividad_transporte ? 'Quitar la marca de transporte' : 'Marcar como transporte (pide 3 documentos más)'}</button></div>` : ''}
-      </div>
-
-      <div class="tarjeta">
-        <h3>Mensajes enviados a la persona <span class="tiny muted">(historial; cada uno se puede reenviar por WhatsApp o correo)</span></h3>
-        ${segs.length ? `<ol class="linea-tiempo">${segs.map(g => { const pts = g.puntos || []; const firma = g.origen === 'seccion' ? 'Secretaría de Organización · ' + s.seccion + ' · SITAD' : undefined; const wa = g.tipo === 'prevencion' ? waPrevencion(s, pts) : waSeguimiento(s, pts, firma); const co = g.tipo === 'prevencion' ? correoPrevencion(s, pts) : correoSeguimiento(s, pts, firma); const paso = g.tipo === 'prevencion' ? 'prevencion' : 'seguimiento'; const env = envios.find(x => x.paso === paso && (paso === 'prevencion' || x.enviado_at >= g.created_at)); return `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención formal' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'}${g.origen === 'seccion' ? ' (Sección)' : ' (CEN)'} · ${fechaLarga(g.fecha)}</b> ${env ? `<span class="etiqueta verde">✓ enviado: ${quienEnvio(env)}</span>` : '<span class="etiqueta">sin enviar</span>'}<span>${pts.length ? pts.map((x, i) => (i + 1) + '. ' + esc(x)).join('<br>') : esc(g.texto || '')}</span><div class="mt-1"><a class="btn wa chico" href="${whatsapp(tel, wa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''} data-envio="${paso}|whatsapp">WhatsApp</a> <a class="btn secundario chico" href="${mailto(s.correo, co.asunto, co.cuerpo)}" data-envio="${paso}|correo">Correo</a> <span class="tiny muted">al pulsar queda registrado el envío (quién, cuándo, por qué medio)</span></div></li>`; }).join('')}</ol>` : '<p class="small muted">Todavía no hay seguimientos.</p>'}
-      </div>
-      ${esOrg ? `<div class="tarjeta">
-        <h3>Aviso en su consulta en línea <span class="tiny muted">(opcional; lo ve en "Consultar mi trámite")</span></h3>
-        <textarea id="mensaje">${esc(s.mensaje_publico || '')}</textarea>
-        <div class="acciones"><button class="btn secundario chico" id="guardar-mensaje">Guardar mensaje</button><span class="small muted">Solo para avisos puntuales. Para pedirle documentos usa el botón de Acciones.</span></div>
-      </div>
-      <div class="tarjeta">
-        <h3>Notas internas</h3>
-        <textarea id="notas">${esc(s.notas || '')}</textarea>
-        <div class="acciones"><button class="btn secundario chico" id="guardar-notas">Guardar notas</button></div>
-      </div>` : ''}
     </div>
 
     <div class="lateral">
@@ -189,6 +161,38 @@ function render() {
         <label class="casilla small"><input type="checkbox" id="e-credencial"> Entregué la credencial con el número de afiliado ${pad.numero_afiliacion}</label>
         <div class="campo mt-1"><label for="e-nota" class="small">Nota (opcional)</label><input type="text" id="e-nota" placeholder="Ej. Se le explicó el funcionamiento de la Sección; se entregó copia del Estatuto"></div>
         <button class="btn verde" id="e-registrar">✓ Registrar entrega en oficina</button>` : '<p class="small muted">Pendiente: la persona no ha pasado a la oficina.</p>'}`}
+      </div>` : ''}
+      <div class="tarjeta">
+        <h3>Datos capturados <span class="tiny muted">(Anexo 23 y manifestación)</span></h3>
+        <dl class="datos">
+          ${dd('CURP · RFC', esc(s.curp || '—') + ' · ' + esc(s.rfc || '—'))}${dd('Nacimiento · género · estado civil', fecha(s.fecha_nacimiento) + ' · ' + esc(s.genero || '—') + ' · ' + esc(s.estado_civil || '—'))}
+          ${dd('Domicilio', [s.domicilio, s.colonia, s.cp ? 'C.P. ' + s.cp : '', s.municipio, s.estado_domicilio].filter(Boolean).map(esc).join(', '))}
+          ${dd('Seguridad social', 'NSS ' + esc(s.nss || '—') + ' · ' + esc(s.unidad_medica || '—') + (s.unidad_medica_ciudad ? ', ' + esc(s.unidad_medica_ciudad) : ''))}
+          ${dd('Situación profesional', esc(s.escolaridad || '—') + (s.escolaridad_estado ? ' (' + esc(s.escolaridad_estado) + ')' : '') + ' · ' + esc(s.carrera || '—'))}
+          ${dd('Empresa', esc(s.empresa) + ' · ' + esc(s.puesto || '—') + (s.fecha_inicio_relacion ? ' · ingreso ' + fecha(s.fecha_inicio_relacion) : '') + ' · ' + esc(s.frecuencia_pago || '—'))}
+          ${dd('Domicilio fiscal · contacto', esc(s.domicilio_fiscal || '—') + ' · ' + esc(s.telefono_empresa || '—') + ' · ' + esc(s.jefe_laboral || '—'))}
+          ${dd('Seguro del instrumento', esc(s.seguro_aseguradora || '—') + ' · ' + esc(s.seguro_poliza || '—') + ' · ' + esc(s.seguro_vigencia || '—'))}
+          ${dd('Cónyuge', s.conyuge_nombre ? esc(s.conyuge_nombre) + ' · ' + esc(s.conyuge_domicilio || '') + ' · ' + esc(s.conyuge_telefono || '') : 'No aplica')}
+          ${dd('Dependientes', dep.length ? dep.map(x => esc(x.nombre) + ' (' + esc(x.parentesco || '') + (x.edad != null ? ', ' + x.edad + ' años' : '') + ')').join('; ') : 'No aplica')}
+          ${dd('Manifestación', 'Se identifica con ' + esc(s.identificacion_tipo || '—') + ' · patrón ' + esc(s.patron || '—') + ' · firma en ' + esc(s.ciudad_firma || '—'))}
+          ${dd('Declaraciones', (s.acepta_estatuto ? 'Acepta Estatutos y Documentos Básicos (' + fecha(s.acepta_estatuto_at) + ')' : '<span class="rojo">NO aceptó los Estatutos</span>') + ' · ' + (s.es_confianza ? '<span class="rojo">declara funciones de confianza</span>' : 'no es de confianza') + ' · aviso de privacidad ' + (s.aviso_privacidad_at ? fecha(s.aviso_privacidad_at) : '—') + ' · ' + (s.actividad_transporte ? 'transporte de pasajeros / última milla' : 'no es transporte'))}
+        </dl>
+        ${esOrg && !cerrada ? `<div class="acciones"><button class="btn discreto chico" id="a-transporte">${s.actividad_transporte ? 'Quitar la marca de transporte' : 'Marcar como transporte (pide 3 documentos más)'}</button></div>` : ''}
+      </div>
+
+      <div class="tarjeta">
+        <h3>Mensajes enviados a la persona <span class="tiny muted">(historial; cada uno se puede reenviar por WhatsApp o correo)</span></h3>
+        ${segs.length ? `<ol class="linea-tiempo">${segs.map(g => { const pts = g.puntos || []; const firma = g.origen === 'seccion' ? 'Secretaría de Organización · ' + s.seccion + ' · SITAD' : undefined; const wa = g.tipo === 'prevencion' ? waPrevencion(s, pts) : waSeguimiento(s, pts, firma); const co = g.tipo === 'prevencion' ? correoPrevencion(s, pts) : correoSeguimiento(s, pts, firma); const paso = g.tipo === 'prevencion' ? 'prevencion' : 'seguimiento'; const env = envios.find(x => x.paso === paso && (paso === 'prevencion' || x.enviado_at >= g.created_at)); return `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención formal' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'}${g.origen === 'seccion' ? ' (Sección)' : ' (CEN)'} · ${fechaLarga(g.fecha)}</b> ${env ? `<span class="etiqueta verde">✓ enviado: ${quienEnvio(env)}</span>` : '<span class="etiqueta">sin enviar</span>'}<span>${pts.length ? pts.map((x, i) => (i + 1) + '. ' + esc(x)).join('<br>') : esc(g.texto || '')}</span><div class="mt-1"><a class="btn wa chico" href="${whatsapp(tel, wa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''} data-envio="${paso}|whatsapp">WhatsApp</a> <a class="btn secundario chico" href="${mailto(s.correo, co.asunto, co.cuerpo)}" data-envio="${paso}|correo">Correo</a> <span class="tiny muted">al pulsar queda registrado el envío (quién, cuándo, por qué medio)</span></div></li>`; }).join('')}</ol>` : '<p class="small muted">Todavía no hay seguimientos.</p>'}
+      </div>
+      ${esOrg ? `<div class="tarjeta">
+        <h3>Aviso en su consulta en línea <span class="tiny muted">(opcional; lo ve en "Consultar mi trámite")</span></h3>
+        <textarea id="mensaje">${esc(s.mensaje_publico || '')}</textarea>
+        <div class="acciones"><button class="btn secundario chico" id="guardar-mensaje">Guardar mensaje</button><span class="small muted">Solo para avisos puntuales. Para pedirle documentos usa el botón de Acciones.</span></div>
+      </div>
+      <div class="tarjeta">
+        <h3>Notas internas</h3>
+        <textarea id="notas">${esc(s.notas || '')}</textarea>
+        <div class="acciones"><button class="btn secundario chico" id="guardar-notas">Guardar notas</button></div>
       </div>` : ''}
     </div>
   </div>`;
@@ -247,7 +251,7 @@ async function cargarVisores() {
     const d = docs.find(x => x.id === caja.dataset.ver); if (!d) continue;
     try {
       const u = await urlFirmada(d.archivo_url, 1800); const esPdf = /\.pdf(\?|$)/i.test(d.archivo_url) || /pdf/i.test(d.nombre_archivo || '');
-      caja.innerHTML = esPdf ? `<iframe src="${u}#toolbar=0&view=FitH" title="${esc(d.nombre_archivo || '')}"></iframe>` : `<img src="${u}" alt="${esc(d.nombre_archivo || '')}" loading="lazy">`;
+      caja.innerHTML = esPdf ? `<iframe src="${u}#toolbar=0&view=${vistaPdf()}" title="${esc(d.nombre_archivo || '')}"></iframe>` : `<img src="${u}" alt="${esc(d.nombre_archivo || '')}" loading="lazy">`;
     } catch (e) { caja.innerHTML = `<span class="small" style="color:#f88">No se pudo mostrar: ${esc(e.message || e)}</span>`; }
   }
 }
@@ -266,6 +270,13 @@ function enlazar(cerrada, abierta, req) {
     if (paso === 'carta' && pad && !pad.alta_enviada_at) { const { error: e2 } = await sb.rpc('marcar_alta_enviada', { p_padron: pad.id, p_medio: medio === 'whatsapp' ? 'WhatsApp' : 'correo' }); if (e2) toast('El envío quedó registrado, pero no se pudo marcar el alta como enviada: ' + e2.message, 'error'); }
     setTimeout(cargar, 600); }));
   $$('[data-copiar-html]').forEach(b => b.onclick = async () => { try { await copiarHtml(decodeURIComponent(b.dataset.copiarHtml)); toast('Copiado con formato. En Outlook: abre el correo con el botón "Correo", borra el texto y pega (Ctrl+V): las ligas quedan clicables.', 'ok'); } catch (e) { toast('No se pudo copiar: ' + (e.message || e), 'error'); } });
+  const activarDoc = clave => { docActivo = clave; $$('.visor-doc').forEach(v => v.classList.toggle('activo', v.dataset.clave === clave)); $$('[data-tab]').forEach(b => b.classList.toggle('activo', b.dataset.tab === clave)); };
+  $$('[data-tab]').forEach(b => b.onclick = () => activarDoc(b.dataset.tab));
+  $$('[data-vista]').forEach(b => { b.classList.toggle('activo', b.dataset.vista === vistaPdf()); b.onclick = () => { try { localStorage.setItem('visor_vista', b.dataset.vista); } catch {} $$('[data-vista]').forEach(x => x.classList.toggle('activo', x.dataset.vista === b.dataset.vista)); $$('.visor-doc iframe').forEach(f => { f.src = f.src.replace(/view=[A-Za-z]+/, 'view=' + b.dataset.vista); }); }; });
+  // Al abrir, la ficha se coloca al tope de la ventana para que el documento use todo el alto (con "Volver" arriba se regresa a la bandeja)
+  if (!enlazar.colocado) { enlazar.colocado = true; const colocar = () => { const f = document.querySelector('.ficha'); if (!f || innerWidth < 900) return; const top = f.getBoundingClientRect().top + window.scrollY - 8; if (window.scrollY < top - 4) window.scrollTo(0, top); }; [150, 700, 1500].forEach(ms => setTimeout(colocar, ms)); }
+  $$('[data-tabnav]').forEach(b => b.onclick = () => { const claves = $$('[data-tab]').map(x => x.dataset.tab); const i = claves.indexOf(docActivo); const n = i + parseInt(b.dataset.tabnav); if (n >= 0 && n < claves.length) activarDoc(claves[n]); });
+  $$('[data-obs]').forEach(ta => { ta.onfocus = () => ta.rows = 3; ta.onblur = () => { if (!ta.value.trim()) ta.rows = 1; }; if (ta.value.trim()) ta.rows = 2; });
   const on = (i, fn) => { const b = $('#' + i); if (b) b.onclick = fn; };
   on('guardar-notas', () => actualizar({ notas: $('#notas').value }, 'Notas guardadas.'));
   on('guardar-mensaje', () => actualizar({ mensaje_publico: $('#mensaje').value.trim() || null }, 'Mensaje guardado; la persona lo ve en su consulta.'));

@@ -73,7 +73,7 @@ export const ESTADO_INFO = {
   'Ejecutada en padrón': { etiqueta: 'verde', persona: 'Ya formas parte del Sindicato. Tu alta en el Padrón está registrada.' },
   'Desistida': { etiqueta: 'carbon', persona: 'La solicitud quedó sin efectos por desistimiento.' },
 };
-export const SEMAFORO_TXT = { verde: 'Lista para dictamen', amarillo: 'Expediente incompleto', rojo: 'Revisar: duplicado o confianza', cerrada: 'Concluida' };
+export const SEMAFORO_TXT = { verde: 'Lista para dictamen', amarillo: 'Expediente incompleto', rojo: 'Revisar: misma CURP que un afiliado, o confianza', cerrada: 'Concluida' };
 export const ROL_NOMBRE = { cen_organizacion: 'Organización del CEN', sg: 'Secretario General', cen_lectura: 'CEN (lectura)', seccion_organizacion: 'Organización de Sección', seccion_sg: 'Secretaría General de Sección', finanzas: 'Secretaría de Finanzas' };
 export function fechaHoraLarga(ts) { if (!ts) return '—'; const d = new Date(ts); const f = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', day: 'numeric', month: 'long', year: 'numeric' }).format(d); const h = new Intl.DateTimeFormat('es-MX', { timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', hour12: false }).format(d); return `${f} a las ${h} horas`; }
 export function dinero(n) { return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(n || 0)); }
