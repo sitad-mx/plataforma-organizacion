@@ -25,7 +25,13 @@ const slug = (param('s') || param('seccion') || '').toLowerCase().trim();
 await armazon({ titulo: 'Solicitud de afiliación' });
 
 if (!slug) {
-  vista.innerHTML = `<div class="tarjeta"><h1>Necesitas la liga de tu Sección</h1><p>La solicitud de afiliación se hace desde la liga que te comparte la Secretaría de Organización de tu Sección Sindical. Así tu solicitud queda ligada a ella desde el primer día.</p><p>Si no la tienes, pídela a tu Sección o escribe a <a href="mailto:${CFG.CORREO_ORGANIZACION}">${CFG.CORREO_ORGANIZACION}</a> indicando tu ciudad o zona de operación.</p><p class="mt-2"><a class="btn secundario" href="${ROOT}estado/">Ya tengo folio: consultar mi trámite</a></p></div>`;
+  const { data: lista } = await sb.rpc('secciones_publicas');
+  const ops = (lista || []).map(x => `<option value="${esc(x.slug)}">${esc(x.denominacion)}${x.numero ? ' · Sección ' + x.numero : ''} (${esc(x.sede || x.entidad)})</option>`).join('');
+  vista.innerHTML = `<div class="tarjeta"><h1>¿A qué Sección te vas a afiliar?</h1><p>Elige la Sección de tu ciudad o estado. Si tu Sección te compartió una liga, también puedes entrar por ahí: es lo mismo.</p>
+    <div class="campo"><label for="elige-seccion">Sección</label><select id="elige-seccion"><option value="">Elige tu Sección…</option>${ops}</select></div>
+    <div class="acciones"><button class="btn" id="ir-seccion">Continuar</button></div>
+    <p class="small muted mt-2">¿No aparece tu ciudad? Escribe a <a href="mailto:${CFG.CORREO_ORGANIZACION}">${CFG.CORREO_ORGANIZACION}</a> indicando tu ciudad y tu empresa o plataforma.</p></div>`;
+  $('#ir-seccion').onclick = () => { const v = $('#elige-seccion').value; if (!v) return toast('Elige tu Sección.', 'error'); location.href = location.pathname + '?s=' + encodeURIComponent(v); };
 } else {
   const { data: secs, error } = await sb.rpc('seccion_publica', { p_slug: slug });
   const sec = secs && secs[0];
