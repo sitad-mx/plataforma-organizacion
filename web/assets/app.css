@@ -357,3 +357,8 @@ dl.datos dd { margin: 0; }
 #acciones-caja .acciones { margin-top: .6rem; gap: .5rem; }
 #acciones-caja .acciones .btn { justify-content: center; }
 #acciones-caja .aviso { margin: .5rem 0; padding: .5rem .75rem; }
+
+/* Resumen por Sección en la bandeja (30-sep-2026) */
+table.tabla th.num { text-align: right; }
+table.tabla.compacta td, table.tabla.compacta th { padding: .35rem .6rem; }
+table.tabla.compacta tr[data-sec]:hover td { background: var(--rojo-suave, #f7e9e9); }
