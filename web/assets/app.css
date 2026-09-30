@@ -340,3 +340,20 @@ dl.datos dd { margin: 0; }
 
 /* Bandeja del CEN: expediente del que se acaba de volver */
 .tabla tr.ultimo-visto td { background: #fff5d6; box-shadow: inset 3px 0 0 var(--rojo); }
+
+/* ===== Ficha: tarjetas abatibles (petición de Manuel 30-sep-2026: lo que más usa arriba y a la vista; lo demás plegado o abajo) ===== */
+.tarjeta.plegable { padding: .8rem 1.25rem; }
+.tarjeta.plegable > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: .5rem; }
+.tarjeta.plegable > summary::-webkit-details-marker { display: none; }
+.tarjeta.plegable > summary::before { content: '▸'; color: var(--rojo); font-size: .95rem; transition: transform .15s; }
+.tarjeta.plegable[open] > summary::before { transform: rotate(90deg); }
+.tarjeta.plegable > summary h3 { margin: 0; display: inline; }
+.tarjeta.plegable[open] > summary { margin-bottom: .7rem; }
+.ayuda-botones { margin-top: .7rem; }
+.ayuda-botones > summary { cursor: pointer; color: var(--apoyo); }
+.ayuda-botones ul { margin: .4rem 0 0 1.1rem; padding: 0; }
+.ayuda-botones li { margin: .3rem 0; }
+#acciones-caja { padding: 1rem 1.25rem; }
+#acciones-caja .acciones { margin-top: .6rem; gap: .5rem; }
+#acciones-caja .acciones .btn { justify-content: center; }
+#acciones-caja .aviso { margin: .5rem 0; padding: .5rem .75rem; }

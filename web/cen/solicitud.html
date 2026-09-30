@@ -129,8 +129,9 @@ function render() {
     </div>
 
     <div class="lateral">
-      <div class="tarjeta">
-        <h3>Mensajes a la persona <span class="tiny muted">(en este orden; textos oficiales del SG)</span></h3><p class="tiny muted">Al pulsar WhatsApp o Correo queda registrado quién lo envió y cuándo, para que nadie lo repita.</p>
+      <div class="tarjeta" id="acciones-caja"><h3>Acciones</h3>${accionesHtml(cerrada)}</div>
+      <div class="tarjeta" id="mensajes-caja">
+        <h3>Mensajes a la persona <span class="tiny muted">(en este orden; textos oficiales del SG)</span></h3>
         ${enviar('1 · Acuse de recepción', tel, s.correo, correoAcuse(s).asunto, correoAcuse(s).cuerpo, waAcuse(s), undefined, 'acuse')}
         ${s.fecha_prevencion ? enviar('2 · Prevención (faltantes + liga para corregir)', tel, s.correo, pv.asunto, pv.cuerpo, waPrevencion(s, faltantesGuardados()), undefined, 'prevencion') + `<p class="tiny"><a href="${ROOT}documento.html?tipo=prevencion&${q}" target="_blank">FT-002 · Prevención (imprimir)</a></p>` : ''}
         ${(() => { if (!s.fecha_prevencion || s.fecha_dictamen) return ''; const pts = puntosSugeridos(req); if (!pts.length) return `<div class="aviso ok small">2b · Ya no le falta nada: subió y se confirmó todo lo prevenido.</div>`; const ultSeg = [...segs].filter(g => g.tipo === 'seguimiento').sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0]; const ultEnv = envios.filter(x => x.paso === 'seguimiento').sort((a, b) => String(b.enviado_at).localeCompare(String(a.enviado_at)))[0]; const yaEnviado = ultSeg && ultEnv && JSON.stringify(ultSeg.puntos) === JSON.stringify(pts) && ultEnv.enviado_at >= ultSeg.created_at; const co = correoSeguimiento(s, pts); return `<div class="envio"><span class="small"><b>2b · Recordatorio: lo que sigue faltando (${pts.length})</b> ${yaEnviado ? `<span class="etiqueta verde">✓ enviado: ${quienEnvio(ultEnv)}</span>` : '<span class="etiqueta amarillo">pendiente de enviar</span>'}<br><span class="tiny muted">${pts.map(esc).join(' · ')}</span></span> <a class="btn wa chico" href="${whatsapp(tel, waSeguimiento(s, pts))}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''} data-envio="seguimiento|whatsapp" data-puntos="${encodeURIComponent(JSON.stringify(pts))}">WhatsApp</a> <a class="btn secundario chico" href="${mailto(s.correo, co.asunto, co.cuerpo)}" data-envio="seguimiento|correo" data-puntos="${encodeURIComponent(JSON.stringify(pts))}">Correo</a> <button type="button" class="btn discreto chico" data-copiar-html="${encodeURIComponent(co.cuerpo)}" title="Copia el texto con formato para pegarlo en Outlook">📋 Copiar con formato</button><p class="tiny muted" style="flex-basis:100%;margin:.2rem 0 0">Se arma solo con lo que hoy falta o tiene observación (no repite lo que ya subió). Al pulsar queda registrado como seguimiento y como envío.</p></div>`; })()}
@@ -140,20 +141,8 @@ function render() {
         ${padC ? (pad.alta_enviada_at ? `<div class="aviso ok small">Alta enviada el ${fechaLarga(String(pad.alta_enviada_at).slice(0, 10))}${pad.alta_enviada_medio ? ' por ' + esc(pad.alta_enviada_medio) : ''}.</div>` : `<div class="aviso small"><b>Alta en el Padrón: carta de aceptación por enviar.</b> Manda el paso 5 con WhatsApp o Correo; al pulsar queda registrada como enviada.</div>`) + (!s.oficina_domicilio ? `<div class="aviso atencion small">La ${esc(s.seccion)} <b>no ha capturado su oficina de atención</b> (domicilio, horario, persona y teléfono). La carta dirá que la Sección la contactará. ${esSeccion ? 'Captúrala en tu portal, pestaña Directorio.' : 'Pídeselo a la Sección o captúralo en Secciones.'}</div>` : '') + enviar(s.asamblea_fecha_hora ? '5 · Carta de aceptación e información para la asamblea' : '5 · Carta de aceptación (cita en la oficina de la Sección)', tel, s.correo, correoAlta(padC, s).asunto, correoAlta(padC, s).cuerpo, waAlta(padC, s), undefined, 'carta') + `
           <p class="tiny"><b>El mensaje ya lleva las ligas</b> para que la persona descargue su <a href="${ROOT}documento.html?tipo=constancia&id=${pad.id}" target="_blank">Constancia (Anexo 15)</a>${s.asamblea_fecha_hora ? ` y su <a href="${ROOT}documento.html?tipo=gafete&id=${pad.id}" target="_blank">Gafete (Anexo 14)</a>` : ''}${s.asamblea_fecha_hora ? ', con la fecha, hora y sede de la asamblea' : ''}; no hace falta adjuntar nada (si quieres, descárgalos en PDF y adjúntalos también). <b>No se envían</b> la credencial ni el número de afiliado: se entregan en persona (tarjeta "Entrega en oficina").</p>
           ${!esSeccion && pad.entrega_at ? enviar('6 · Cuota sindical (carta AF-09)', tel, s.correo, correoFinanzas(padC, cfg).asunto, correoFinanzas(padC, cfg).cuerpo, correoFinanzas(padC, cfg).cuerpo, undefined, 'finanzas') + `<p class="tiny"><a href="${mailto(CFG.CORREO_FINANZAS, 'SITAD · Alta en el Padrón · ' + pad.folio, correoAlta(padC, s).finanzas)}">Aviso interno a Finanzas</a></p>` : !esSeccion ? `<p class="tiny muted">6 · La carta de Finanzas (AF-09) lleva el número de afiliado: se envía cuando la persona ya recogió su credencial.</p>` : ''}` : ''}
-        <p class="tiny muted mt-2">WhatsApp abre WhatsApp Web o la app con el número de la persona y el mensaje ya escrito; tú solo pulsas enviar. Los correos se abren en tu programa de correo hasta que exista el buzón institucional.</p>
+        <details class="ayuda-botones tiny"><summary>¿Cómo funciona?</summary><p class="muted mb-0">Al pulsar WhatsApp o Correo queda registrado quién lo envió y cuándo, para que nadie lo repita. WhatsApp abre WhatsApp Web o la app con el número de la persona y el mensaje ya escrito; tú solo pulsas enviar. Los correos se abren en tu programa de correo.</p></details>
       </div>
-      <div class="tarjeta">
-        <h3>Trámite</h3>
-        <ol class="linea-tiempo">
-          <li class="hecho"><b>Recibida</b><span>${fechaLarga(s.fecha_recepcion)} · límite para prevenir ${fecha(s.limite_prevencion)}</span></li>
-          ${s.fecha_prevencion ? `<li class="hecho"><b>Prevenida</b><span>${fechaLarga(s.fecha_prevencion)} · plazo para subsanar ${fecha(s.limite_subsanacion)}</span></li>` : ''}
-          ${s.fecha_subsanacion ? `<li class="hecho"><b>Subsanada</b><span>${fechaLarga(s.fecha_subsanacion)} · nuevo límite de dictamen ${fecha(s.limite_dictamen)}</span></li>` : ''}
-          <li class="${s.fecha_dictamen ? 'hecho' : ''}"><b>Dictamen ${s.sentido ? '· ' + esc(s.sentido) : ''}</b><span>${s.fecha_dictamen ? fechaLarga(s.fecha_dictamen) : 'Pendiente · límite ' + fecha(s.limite_dictamen)}</span></li>
-          ${s.sentido === 'Favorable' ? `<li class="${s.fecha_ejecucion_padron ? 'hecho' : ''}"><b>Alta en el Padrón</b><span>${s.fecha_ejecucion_padron ? fechaLarga(s.fecha_ejecucion_padron) + (pad ? ' · No. ' + pad.numero_afiliacion : '') : 'Automática con el dictamen favorable'}</span></li>` : ''}
-          ${pad ? `<li class="${pad.entrega_at ? 'hecho' : ''}"><b>Entrega en oficina</b><span>${pad.entrega_at ? fechaLarga(String(pad.entrega_at).slice(0, 10)) + ' · papelería en resguardo y credencial entregada' : 'Pendiente: la persona pasa a la oficina de su Sección'}</span></li>` : ''}
-        </ol>
-      </div>
-      <div class="tarjeta" id="acciones-caja"><h3>Acciones</h3>${accionesHtml(cerrada)}</div>
       ${pad ? `<div class="tarjeta" id="entrega-caja">
         <h3>Entrega en oficina <span class="tiny muted">(credencial y número de afiliado)</span></h3>
         ${pad.entrega_at ? `<div class="aviso ok small"><b>Entregada</b> el ${fechaLarga(String(pad.entrega_at).slice(0, 10))} en ${esc(pad.entrega_lugar || 'la Sección')}: papelería en original recibida y resguardada; credencial No. ${pad.numero_afiliacion} entregada.${pad.entrega_nota ? '<br>' + esc(pad.entrega_nota) : ''}</div>${esOrg ? `<button class="btn discreto chico" id="e-anular">Anular la entrega (registrada por error)</button>` : ''}` : `
@@ -166,8 +155,8 @@ function render() {
         <div class="campo mt-1"><label for="e-nota" class="small">Nota (opcional)</label><input type="text" id="e-nota" placeholder="Ej. Se le explicó el funcionamiento de la Sección; se entregó copia del Estatuto"></div>
         <button class="btn verde" id="e-registrar">✓ Registrar entrega en oficina</button>` : '<p class="small muted">Pendiente: la persona no ha pasado a la oficina.</p>'}`}
       </div>` : ''}
-      <div class="tarjeta">
-        <h3>Datos capturados <span class="tiny muted">(Anexo 23 y manifestación)</span></h3>
+      <details class="tarjeta plegable">
+        <summary><h3>Datos capturados <span class="tiny muted">(Anexo 23 y manifestación)</span></h3></summary>
         <dl class="datos">
           ${dd('CURP · RFC', esc(s.curp || '—') + ' · ' + esc(s.rfc || '—'))}${dd('Nacimiento · género · estado civil', fecha(s.fecha_nacimiento) + ' · ' + esc(s.genero || '—') + ' · ' + esc(s.estado_civil || '—'))}
           ${dd('Domicilio', [s.domicilio, s.colonia, s.cp ? 'C.P. ' + s.cp : '', s.municipio, s.estado_domicilio].filter(Boolean).map(esc).join(', '))}
@@ -182,22 +171,33 @@ function render() {
           ${dd('Declaraciones', (s.acepta_estatuto ? 'Acepta Estatutos y Documentos Básicos (' + fecha(s.acepta_estatuto_at) + ')' : '<span class="rojo">NO aceptó los Estatutos</span>') + ' · ' + (s.es_confianza ? '<span class="rojo">declara funciones de confianza</span>' : 'no es de confianza') + ' · aviso de privacidad ' + (s.aviso_privacidad_at ? fecha(s.aviso_privacidad_at) : '—') + ' · ' + (s.actividad_transporte ? 'transporte de pasajeros / última milla' : 'no es transporte'))}
         </dl>
         ${esOrg && !cerrada ? `<div class="acciones"><button class="btn discreto chico" id="a-transporte">${s.actividad_transporte ? 'Quitar la marca de transporte' : 'Marcar como transporte (pide 3 documentos más)'}</button></div>` : ''}
-      </div>
+      </details>
 
-      <div class="tarjeta">
-        <h3>Mensajes enviados a la persona <span class="tiny muted">(historial; cada uno se puede reenviar por WhatsApp o correo)</span></h3>
+      <details class="tarjeta plegable">
+        <summary><h3>Mensajes enviados <span class="tiny muted">(historial; se pueden reenviar)</span></h3></summary>
         ${segs.length ? `<ol class="linea-tiempo">${segs.map(g => { const pts = g.puntos || []; const firma = g.origen === 'seccion' ? 'Secretaría de Organización · ' + s.seccion + ' · SITAD' : undefined; const wa = g.tipo === 'prevencion' ? waPrevencion(s, pts) : waSeguimiento(s, pts, firma); const co = g.tipo === 'prevencion' ? correoPrevencion(s, pts) : correoSeguimiento(s, pts, firma); const paso = g.tipo === 'prevencion' ? 'prevencion' : 'seguimiento'; const env = envios.find(x => x.paso === paso && (paso === 'prevencion' || x.enviado_at >= g.created_at)); return `<li class="hecho"><b>${g.tipo === 'prevencion' ? 'Prevención formal' : g.tipo === 'mensaje' ? 'Mensaje' : 'Seguimiento'}${g.origen === 'seccion' ? ' (Sección)' : ' (CEN)'} · ${fechaLarga(g.fecha)}</b> ${env ? `<span class="etiqueta verde">✓ enviado: ${quienEnvio(env)}</span>` : '<span class="etiqueta">sin enviar</span>'}<span>${pts.length ? pts.map((x, i) => (i + 1) + '. ' + esc(x)).join('<br>') : esc(g.texto || '')}</span><div class="mt-1"><a class="btn wa chico" href="${whatsapp(tel, wa)}" target="_blank" ${!tel ? 'style="opacity:.5;pointer-events:none"' : ''} data-envio="${paso}|whatsapp">WhatsApp</a> <a class="btn secundario chico" href="${mailto(s.correo, co.asunto, co.cuerpo)}" data-envio="${paso}|correo">Correo</a> <span class="tiny muted">al pulsar queda registrado el envío (quién, cuándo, por qué medio)</span></div></li>`; }).join('')}</ol>` : '<p class="small muted">Todavía no hay seguimientos.</p>'}
-      </div>
-      ${esOrg ? `<div class="tarjeta">
-        <h3>Aviso en su consulta en línea <span class="tiny muted">(opcional; lo ve en "Consultar mi trámite")</span></h3>
+      </details>
+      ${esOrg ? `<details class="tarjeta plegable">
+        <summary><h3>Aviso en su consulta en línea <span class="tiny muted">(opcional)</span></h3></summary>
         <textarea id="mensaje">${esc(s.mensaje_publico || '')}</textarea>
         <div class="acciones"><button class="btn secundario chico" id="guardar-mensaje">Guardar mensaje</button><span class="small muted">Solo para avisos puntuales. Para pedirle documentos usa el botón de Acciones.</span></div>
-      </div>
-      <div class="tarjeta">
-        <h3>Notas internas</h3>
+      </details>
+      <details class="tarjeta plegable">
+        <summary><h3>Notas internas</h3></summary>
         <textarea id="notas">${esc(s.notas || '')}</textarea>
         <div class="acciones"><button class="btn secundario chico" id="guardar-notas">Guardar notas</button></div>
-      </div>` : ''}
+      </details>` : ''}
+      <details class="tarjeta plegable">
+        <summary><h3>Trámite <span class="tiny muted">(fechas y plazos)</span></h3></summary>
+        <ol class="linea-tiempo">
+          <li class="hecho"><b>Recibida</b><span>${fechaLarga(s.fecha_recepcion)} · límite para prevenir ${fecha(s.limite_prevencion)}</span></li>
+          ${s.fecha_prevencion ? `<li class="hecho"><b>Prevenida</b><span>${fechaLarga(s.fecha_prevencion)} · plazo para subsanar ${fecha(s.limite_subsanacion)}</span></li>` : ''}
+          ${s.fecha_subsanacion ? `<li class="hecho"><b>Subsanada</b><span>${fechaLarga(s.fecha_subsanacion)} · nuevo límite de dictamen ${fecha(s.limite_dictamen)}</span></li>` : ''}
+          <li class="${s.fecha_dictamen ? 'hecho' : ''}"><b>Dictamen ${s.sentido ? '· ' + esc(s.sentido) : ''}</b><span>${s.fecha_dictamen ? fechaLarga(s.fecha_dictamen) : 'Pendiente · límite ' + fecha(s.limite_dictamen)}</span></li>
+          ${s.sentido === 'Favorable' ? `<li class="${s.fecha_ejecucion_padron ? 'hecho' : ''}"><b>Alta en el Padrón</b><span>${s.fecha_ejecucion_padron ? fechaLarga(s.fecha_ejecucion_padron) + (pad ? ' · No. ' + pad.numero_afiliacion : '') : 'Automática con el dictamen favorable'}</span></li>` : ''}
+          ${pad ? `<li class="${pad.entrega_at ? 'hecho' : ''}"><b>Entrega en oficina</b><span>${pad.entrega_at ? fechaLarga(String(pad.entrega_at).slice(0, 10)) + ' · papelería en resguardo y credencial entregada' : 'Pendiente: la persona pasa a la oficina de su Sección'}</span></li>` : ''}
+        </ol>
+      </details>
     </div>
   </div>`;
   enlazar(cerrada, abierta, req);
@@ -232,7 +232,8 @@ function accionesHtml(cerrada) {
     if (abierta) { const pts = puntosSugeridos(req); b.push(`<button class="btn secundario" id="a-seguimiento">Pedir corrección / dar seguimiento${pts.length ? ' (' + pts.length + ' punto' + (pts.length === 1 ? '' : 's') + ')' : ''}</button><p class="tiny muted">Arma el mensaje con lo que falta o tiene observación; luego lo envías por WhatsApp o Correo desde "Mensajes enviados a la persona" (queda firmado por tu Sección). Se puede hacer cuantas veces haga falta.</p>`); }
     if (abierta && !s.preautorizada_at) b.push(`<button class="btn verde" id="a-preautorizar">Preautorizar y enviar al CEN</button><p class="tiny muted">Solo cuando el expediente esté completo, cada documento revisado y sin observaciones pendientes.</p>`);
     if (abierta && s.preautorizada_at) b.push(`<p class="small muted">Ya la preautorizaste; está con la Secretaría de Organización del CEN. Si detectas algo, escríbeles por el seguimiento.</p>`);
-    return pre + `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div><p class="small muted">Como Sección revisas el expediente, subes o reemplazas documentos por la persona, le pides correcciones por WhatsApp o correo y preautorizas. El dictamen y el alta los lleva el CEN.</p>`;
+    b.push(`<span></span><p class="tiny muted">Como Sección revisas el expediente, subes o reemplazas documentos por la persona, le pides correcciones por WhatsApp o correo y preautorizas. El dictamen y el alta los lleva el CEN.</p>`);
+    return pre + botonesCompactos(b).replace('<span></span>', '');
   }
   if (!esOrg) return pre + `<p class="small muted">Solo lectura.</p>`;
   const b = [];
@@ -250,7 +251,13 @@ function accionesHtml(cerrada) {
   if (s.estado === 'Enviada al SG') b.push(`<p class="small muted">En espera de la autorización del Secretario General (desde ${fecha(s.fecha_envio_sg)}). Al autorizar, el alta en el Padrón es automática y aquí aparecen la constancia, el gafete y la carta de Finanzas listos para enviar. Si te la comunica por otro medio:</p><button class="btn secundario" id="a-autorizacion-externa">Registrar autorización recibida por otro medio</button>`);
   if (s.estado === 'Autorizada' && !pad) b.push(`<button class="btn verde" id="a-alta">Ejecutar alta en el Padrón</button>`);
   b.push(`<button class="btn discreto chico" id="a-desistir">Registrar desistimiento</button>`);
-  return pre + `<div class="acciones" style="flex-direction:column;align-items:stretch">${b.join('')}</div>`;
+  return pre + botonesCompactos(b);
+}
+// Los botones van solos (sin texto debajo) para que quepan sin desplazarse; las explicaciones se juntan en un menú abatible (petición de Manuel, 30-sep-2026)
+function botonesCompactos(b) {
+  const ayuda = [];
+  const html = b.join('').replace(/<button([^>]*)>([\s\S]*?)<\/button><p class="tiny muted">([\s\S]*?)<\/p>/g, (m, at, txt, exp) => { ayuda.push(`<li><b>${txt}</b>: ${exp}</li>`); return `<button${at}>${txt}</button>`; });
+  return `<div class="acciones" style="flex-direction:column;align-items:stretch">${html}</div>${ayuda.length ? `<details class="ayuda-botones tiny"><summary>¿Qué hace cada botón?</summary><ul>${ayuda.join('')}</ul></details>` : ''}`;
 }
 
 async function cargarVisores() {
@@ -322,7 +329,7 @@ async function prevenir(req) {
   if (error) return toast('No se pudo registrar: ' + error.message, 'error');
   await sb.from('solicitud_seguimientos').insert({ solicitud_id: s.id, tipo: 'prevencion', puntos });
   await cargar(); toast('Prevención registrada. Ahora envíala con los botones WhatsApp o Correo (paso 2, tarjeta "Enviar a la persona").', 'ok');
-  document.querySelector('.lateral .tarjeta:last-child')?.scrollIntoView({ behavior: 'smooth' });
+  document.querySelector('#mensajes-caja')?.scrollIntoView({ behavior: 'smooth' });
 }
 async function seguimiento(req) {
   const texto = prompt('SEGUIMIENTO (se puede hacer cuantas veces haga falta; no fija plazo nuevo). Puntos a corregir, uno por renglón. Puedes editar:', puntosSugeridos(req).join('\n'));
@@ -331,7 +338,7 @@ async function seguimiento(req) {
   const { error } = await sb.from('solicitud_seguimientos').insert({ solicitud_id: s.id, tipo: 'seguimiento', puntos, origen: esSeccion ? 'seccion' : 'cen' });
   if (error) return toast('No se pudo registrar: ' + error.message, 'error');
   await cargar(); toast('Seguimiento registrado. Envíalo con WhatsApp o Correo desde la tarjeta "Mensajes enviados a la persona".', 'ok');
-  document.querySelector('.lateral .tarjeta:last-child')?.scrollIntoView({ behavior: 'smooth' });
+  document.querySelector('#mensajes-caja')?.scrollIntoView({ behavior: 'smooth' });
 }
 async function registrarEntrega() {
   const pap = $('#e-papeleria').checked, cred = $('#e-credencial').checked;
