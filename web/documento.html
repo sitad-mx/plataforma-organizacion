@@ -322,9 +322,43 @@ function computoAS06(a, q, verifs) {
     <p class="small"><b>Si no hay quórum.</b> El Secretario General Seccional no declara instalada la asamblea y no se adopta ningún acuerdo. Organización deja constancia en este formato, conserva la lista de asistencia y el Comité Ejecutivo Seccional acuerda una nueva convocatoria conforme al Estatuto. Se informa a la Secretaría de Organización del CEN el mismo día.</p>
     <h2>3. Conservación del quórum durante las votaciones</h2>
     <table><tr><th>Punto del orden del día</th><th style="width:10%">Hora</th><th style="width:16%">Presentes con derecho a voto</th><th style="width:18%">¿Se conserva el quórum?</th><th style="width:18%">Escrutador que confirma</th></tr>${(verifs.length ? verifs : [{}, {}, {}]).map(x => `<tr><td>${v(x.punto)}</td><td>${x.verificado_at ? hora(x.verificado_at) : '____:____'}</td><td>${x.presentes ?? ''}</td><td>${x.verificado_at ? (x.conserva ? '☒ Sí ☐ No' : '☐ Sí ☒ No') : '☐ Sí ☐ No'}</td><td></td></tr>`).join('')}</table>
-    <p class="small"><i>Este formato se anexa a la lista de asistencia y se sube con ella a la carpeta 04-Asambleas. En la Asamblea Constitutiva lo llena y firma la Secretaría de Organización del CEN.</i></p>
+    <p class="small"><i>Este formato se anexa a la lista de asistencia y se sube con ella a la carpeta 04-Asambleas. No se usa en la Asamblea Constitutiva.</i></p>
     ${pieFT('Formato AS-06 (prellenado por la plataforma)')}</div>`;
 }
+// Asamblea Constitutiva (indicación del Secretario General, 2/3-oct-2026): en una Sección nueva NO hay padrón ni corte,
+// no se informa al Secretario General de la Sección y no se usan hojas membretadas. Se imprime la lista de asistencia del SG
+// (Anexo 05) EN BLANCO: cada persona se registra a mano al llegar; con esa lista se constituye la Sección.
+function anexo05Constitutiva(a, hojas) {
+  const num = a.seccion_numero != null ? String(a.seccion_numero).padStart(2, '0') : '____';
+  const reunidas = a.fecha ? fechaLarga(a.fecha) : '_____________________________________';
+  const convocada = a.fecha_expedicion ? fechaLarga(a.fecha_expedicion) : '___________________________________';
+  const hoja = k => `<div class="a05${k ? ' a05-salto' : ''}">
+      <p class="a05-enc">Lista de asistencia de las personas trabajadoras al servicio de la empresa REEDCAM, S. de R.L. de C.V., reunidas el día ${reunidas}, para celebrar la Asamblea General Constitutiva que fue convocada el día ${convocada}.</p>
+      <table class="a05-t"><tr><th style="width:5%">No.</th><th style="width:13%">NOMBRES</th><th style="width:12%">APELLIDO PATERNO</th><th style="width:12%">APELLIDO MATERNO</th><th style="width:16%">CURP</th><th style="width:11%">PATRON</th><th style="width:17%">DOMICILIO</th><th>FIRMA</th></tr>
+      ${Array.from({ length: 15 }, (_, i) => `<tr><td class="a05-n">${k * 15 + i + 1}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</table>
+      <div class="a05-pie"><div class="a05-notas">NOTAS:</div><div class="a05-firma"><span>Secretario (a) Electo</span></div></div>
+      <p class="a05-sec">Asamblea Constitutiva Sección ${num}</p></div>`;
+  return `<style>
+      .doc-a05 { font-family: Arial, Helvetica, sans-serif; }
+      .doc-a05 .a05-enc { font-size: 10.5pt; text-align: justify; margin: 0 0 8px; }
+      .doc-a05 table.a05-t { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 0; }
+      .doc-a05 table.a05-t th, .doc-a05 table.a05-t td { border: 1px solid #000; padding: 2px 4px; height: 8.2mm; text-align: center; vertical-align: middle; background: #fff; }
+      .doc-a05 table.a05-t th { font-weight: 700; height: auto; }
+      .doc-a05 .a05-pie { display: grid; grid-template-columns: 3fr 2fr; gap: 24px; margin-top: 10px; font-size: 10pt; }
+      .doc-a05 .a05-notas { border: 1px solid #000; min-height: 16mm; padding: 4px 6px; font-weight: 700; }
+      .doc-a05 .a05-firma { display: flex; align-items: flex-end; justify-content: center; border-bottom: 0; }
+      .doc-a05 .a05-firma span { border-top: 1px solid #000; padding-top: 4px; width: 80%; text-align: center; }
+      .doc-a05 .a05-sec { text-align: right; font-size: 9pt; margin: 6px 0 0; }
+      .doc-a05 .a05-salto { break-before: page; page-break-before: always; margin-top: 24px; }
+    </style>
+    <div class="documento apaisado doc-a05">${Array.from({ length: hojas }, (_, k) => hoja(k)).join('')}</div>`;
+}
+const NO_APLICA_CONSTITUTIVA = {
+  convocatoria: 'La convocatoria a la Asamblea Constitutiva es el <b>Anexo 01 del Secretario General</b>; la expide la Secretaría de Organización del Comité Ejecutivo Nacional. La plataforma no genera otra.',
+  lista_corte: 'En la Asamblea Constitutiva <b>no hay padrón ni corte</b>: la Sección se constituye con las personas que acuden y se registran en la lista de asistencia (Anexo 05).',
+  quorum: 'En la Asamblea Constitutiva <b>no se usa el cómputo de quórum e informe al Secretario General Seccional (AS-06)</b>: ese cargo se elige ese día. El quórum lo informa la Secretaría de la Mesa de Debates con la lista de asistencia (Anexo 05), conforme al guion del Secretario General (Anexo 16).',
+};
+const avisoNoAplica = tipoDoc => `<div class="aviso atencion" style="max-width:760px;margin:2rem auto"><p><b>Este documento no se usa en la Asamblea Constitutiva.</b></p><p>${NO_APLICA_CONSTITUTIVA[tipoDoc]}</p><p class="small mb-0">Así lo indicó el Secretario General (3 de octubre de 2026). Los formatos del día están en el Bloque 1 del kit de la Sección (Anexos 04, 05, 06, 07, 08 y 16).</p></div>`;
 async function datosAsamblea() {
   const [r1, r2, r3, r4, r5] = await Promise.all([
     sb.from('v_asambleas').select('*').eq('id', id).single(),
@@ -358,6 +392,13 @@ try {
   } else if (['convocatoria', 'lista_corte', 'asistencia', 'quorum'].includes(tipo)) {
     const d = await datosAsamblea();
     if (!d.a) doc.innerHTML = '<div class="aviso error">No se encontró la asamblea.</div>';
+    else if (d.a.tipo === 'Constitutiva') {
+      if (tipo === 'asistencia') {
+        const hojas = Math.min(20, Math.max(1, parseInt(param('hojas') || '3', 10) || 3));
+        NOMBRES_PDF.asistencia = 'Anexo 05 - Lista de asistencia - Seccion ' + (d.a.seccion_numero != null ? String(d.a.seccion_numero).padStart(2, '0') : '');
+        doc.innerHTML = anexo05Constitutiva(d.a, hojas);
+      } else doc.innerHTML = avisoNoAplica(tipo);
+    }
     else if (tipo === 'convocatoria') doc.innerHTML = convocatoriaAS01(d.a);
     else if (tipo === 'lista_corte') doc.innerHTML = listaCorte(d.a, d.pad);
     else if (tipo === 'asistencia') doc.innerHTML = listaAsistenciaAS05(d.a, d.pad, d.asis);

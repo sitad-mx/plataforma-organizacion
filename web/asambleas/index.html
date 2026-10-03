@@ -43,7 +43,8 @@ const ETIQ = { 'En preparación': '', Convocada: 'azul', Instalada: 'verde', Con
 const ORDEN_TIPO = {
   Ordinaria: [['Registro de asistencia y verificación del quórum', 'Informativo'], ['Declaratoria de instalación por el Secretario General Seccional', 'Informativo'], ['Elección de la Mesa de Debates (Presidencia, Secretaría y dos Escrutadores)', 'Resolutivo'], ['Lectura y, en su caso, aprobación del orden del día', 'Resolutivo'], ['Informe semestral de actividades del Comité Ejecutivo Seccional', 'Resolutivo'], ['Cuenta detallada de los recursos administrados por la Sección', 'Resolutivo'], ['Informe de la Comisión Seccional de Vigilancia', 'Informativo'], ['Propuestas y acuerdos para remitir al Comité Ejecutivo Nacional', 'Resolutivo'], ['Lectura y firma del acta', 'Resolutivo'], ['Clausura', 'Informativo']],
   Extraordinaria: [['Registro de asistencia y verificación del quórum', 'Informativo'], ['Declaratoria de instalación por el Secretario General Seccional', 'Informativo'], ['Elección de la Mesa de Debates (Presidencia, Secretaría y dos Escrutadores)', 'Resolutivo'], ['Lectura y, en su caso, aprobación del orden del día', 'Resolutivo'], ['(Asunto que motiva la Extraordinaria)', 'Resolutivo'], ['Lectura y firma del acta', 'Resolutivo'], ['Clausura', 'Informativo']],
-  Constitutiva: [['Registro de asistencia y verificación del quórum', 'Informativo'], ['Declaratoria de instalación', 'Informativo'], ['Elección de la Mesa de Debates', 'Resolutivo'], ['Lectura del acuerdo del Comité Ejecutivo Nacional que crea la Sección', 'Informativo'], ['Conocimiento y protesta de los Documentos Básicos', 'Informativo'], ['Designación de la Comisión Electoral', 'Resolutivo'], ['Registro de planillas y elección del Comité Ejecutivo Seccional y de la Comisión Seccional de Vigilancia', 'Resolutivo'], ['Toma de protesta', 'Informativo'], ['Lectura y firma del acta · Clausura', 'Resolutivo']],
+  // Constitutiva: el orden del día de la convocatoria del Secretario General (Anexo 01), con la adenda del 21-sep-2026 (protesta, no aprobación; 11 carteras + 3 de la Comisión Seccional de Vigilancia)
+  Constitutiva: [['Declaración de existencia de quórum legal e instalación formal de la Asamblea', 'Informativo'], ['Lectura y, en su caso, aprobación del Orden del Día', 'Resolutivo'], ['Presentación de los invitados especiales', 'Informativo'], ['Bienvenida y lectura del Acuerdo del Comité Ejecutivo Nacional que autoriza la creación de la Sección', 'Informativo'], ['Exposición y análisis de los documentos básicos del Sindicato, así como protesta de cumplirlos y hacerlos cumplir', 'Informativo'], ['Explicación del procedimiento para la elección del Comité Ejecutivo Seccional (comprende la Comisión Seccional de Vigilancia)', 'Informativo'], ['Instalación del Comité Electoral', 'Resolutivo'], ['Recepción y registro de candidaturas (planillas completas: once carteras y tres de la Comisión Seccional de Vigilancia)', 'Resolutivo'], ['Desarrollo de la votación libre, personal, directa y secreta', 'Resolutivo'], ['Escrutinio, cómputo y declaración de resultados', 'Informativo'], ['Toma de protesta del Comité Ejecutivo Seccional y de la Comisión Seccional de Vigilancia electos', 'Informativo'], ['Mensaje de la Secretaria o Secretario General electo', 'Informativo'], ['Mensaje del Representante del Comité Ejecutivo Nacional', 'Informativo'], ['Clausura de la Asamblea', 'Informativo']],
 };
 let a = null, padron = [], asis = [], verifs = [], q = null, secciones = [];
 
@@ -54,7 +55,7 @@ async function nueva() {
   if (!edita) { vista.innerHTML = '<div class="aviso error">Solo la Secretaría de Organización de la Sección u Organización del CEN convocan asambleas.</div>'; return; }
   if (esOrg) { const { data } = await sb.from('secciones').select('id, denominacion').order('denominacion'); secciones = data || []; }
   const secId = esOrg ? (param('seccion') || '') : p.seccion_id;
-  vista.innerHTML = `<h1>Nueva asamblea</h1><p class="muted">Captura lo que dice la convocatoria. La plataforma calcula el corte del padrón (tres días antes) y te avisa si la anticipación no alcanza.</p>
+  vista.innerHTML = `<h1>Nueva asamblea</h1><p class="muted">Captura lo que dice la convocatoria. La plataforma calcula el corte del padrón (tres días antes) y te avisa si la anticipación no alcanza. En la Constitutiva no hay padrón ni corte.</p>
     <form id="f" class="tarjeta">
       ${esOrg ? `<div class="campo"><label>Sección</label><select id="c-sec" required><option value="">Elige…</option>${secciones.map(s => `<option value="${s.id}" ${s.id === secId ? 'selected' : ''}>${esc(s.denominacion)}</option>`).join('')}</select></div>` : ''}
       ${formulario({ tipo: esSeccion ? 'Ordinaria' : 'Constitutiva', hora: '10:00', hora_registro: '09:00', modalidad: 'Presencial', incluye_eleccion: !esSeccion, orden_del_dia: [] })}
@@ -79,7 +80,7 @@ function formulario(x) {
     <div class="fila">
       <div class="campo"><label>Fecha del acuerdo del Comité Ejecutivo Seccional</label><input type="date" id="c-acuerdo" value="${x.fecha_acuerdo_comite || ''}"><span class="ayuda">No aplica en la Constitutiva (la convoca el CEN).</span></div>
       <div class="campo"><label>Fecha de expedición de la convocatoria</label><input type="date" id="c-exp" value="${x.fecha_expedicion || ''}"><span class="ayuda" id="ayuda-antic">Se publica el mismo día.</span></div>
-      <div class="campo"><label class="casilla"><input type="checkbox" id="c-elec" ${x.incluye_eleccion ? 'checked' : ''}> El orden del día incluye una elección</label><span class="ayuda">Entonces manda la regla electoral: diez días y padrón publicado tres días antes.</span></div>
+      <div class="campo"><label class="casilla"><input type="checkbox" id="c-elec" ${x.incluye_eleccion ? 'checked' : ''}> El orden del día incluye una elección</label><span class="ayuda" id="ayuda-elec">Entonces manda la regla electoral: diez días y padrón publicado tres días antes.</span></div>
     </div>
     <div class="campo orden"><label>Orden del día <span class="tiny muted">(un punto por renglón: asunto | Informativo, Deliberativo o Resolutivo)</span> <button type="button" class="btn discreto chico" id="c-orden-tipo">Cargar orden del día tipo</button></label><textarea id="c-orden">${esc(orden)}</textarea></div>
     <div class="campo"><label>Notas internas</label><input type="text" id="c-notas" value="${esc(x.notas || '')}"></div>
@@ -90,7 +91,8 @@ function activarFormulario() {
     if (!f) { $('#antic').innerHTML = ''; return; }
     const corte = new Date(f + 'T12:00:00'); corte.setDate(corte.getDate() - 3);
     const cs = `${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`;
-    let html = `<div class="aviso small">Corte del padrón con derecho a voto: <b>${fechaLarga(cs)}</b> (tres días antes). Anticipación requerida: <b>${req} días hábiles</b> entre la expedición y la asamblea.`;
+    const ae = $('#ayuda-elec'); if (ae) ae.textContent = t === 'Constitutiva' ? 'En la Constitutiva la elección se hace en la misma asamblea, con la lista de asistencia: no hay padrón.' : 'Entonces manda la regla electoral: diez días y padrón publicado tres días antes.';
+    let html = t === 'Constitutiva' ? `<div class="aviso small">En la Asamblea Constitutiva <b>no hay padrón ni corte</b> (indicación del Secretario General): la Sección se constituye con quienes se registran en la lista de asistencia (Anexo 05). Anticipación requerida: <b>${req} días hábiles</b> entre la expedición y la asamblea.` : `<div class="aviso small">Corte del padrón con derecho a voto: <b>${fechaLarga(cs)}</b> (tres días antes). Anticipación requerida: <b>${req} días hábiles</b> entre la expedición y la asamblea.`;
     if (e) { const h = habilesEntre(e, f); html += h >= req ? ` <span style="color:var(--verde)">Hay ${h} días hábiles: cumple.</span>` : ` <b style="color:var(--rojo)">Solo hay ${h} días hábiles: no cumple.</b>`; }
     $('#antic').innerHTML = html + '</div>'; };
   ['c-tipo', 'c-fecha', 'c-exp', 'c-elec'].forEach(i => $('#' + i).onchange = calc); calc();
@@ -115,7 +117,60 @@ async function cargar() {
   a = r1.data; padron = r2.data || []; asis = r3.data || []; verifs = r4.data || []; q = r5.data && r5.data[0] ? r5.data[0] : null;
   render();
 }
+// Asamblea Constitutiva (indicación del Secretario General, 2/3-oct-2026): no hay padrón ni corte, no se informa al Secretario
+// General de la Sección y no hay hojas membretadas. La plataforma solo imprime la lista de asistencia del SG (Anexo 05) en blanco
+// y registra el resultado; el registro de asistencia y el quórum se llevan a mano con esa lista.
+function renderConstitutiva() {
+  const editable = edita && ['En preparación', 'Convocada'].includes(a.estado);
+  const qd = `id=${a.id}`;
+  const B1 = 'https://drive.google.com/drive/folders/1fyj-CfqJLIqeDOnMZax6QO_1Qitcp4k7';
+  vista.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:1rem">
+      <div><p class="small muted mb-0" style="text-transform:uppercase;letter-spacing:.06em;font-weight:700;color:var(--rojo)">${esc(a.seccion)}</p>
+        <h1>Asamblea Seccional Constitutiva <span class="etiqueta ${ETIQ[a.estado] || ''}">${esc(a.estado)}</span></h1>
+        <p class="muted mb-0">${fechaLarga(a.fecha)} · ${String(a.hora).slice(0, 5)} h${a.hora_registro ? ' (registro desde las ' + String(a.hora_registro).slice(0, 5) + ')' : ''} · ${esc(a.lugar || 'lugar por definir')} · ${esc(a.modalidad)}</p></div>
+      <div class="acciones" style="margin:0">
+        <a class="btn secundario chico" href="${ROOT}documento.html?tipo=asistencia&${qd}&hojas=3" target="_blank">Lista de asistencia (Anexo 05) · 45 lugares</a>
+        <a class="btn secundario chico" href="${ROOT}documento.html?tipo=asistencia&${qd}&hojas=5" target="_blank">75 lugares</a>
+      </div>
+    </div>
+    <div class="dos-col mt-2">
+      <div>
+        <div class="tarjeta">
+          <h3>Así se celebra la Constitutiva <span class="tiny muted">(indicaciones del Secretario General)</span></h3>
+          <ul class="small" style="margin:0 0 .6rem 1.1rem;padding:0">
+            <li><b>No hay padrón ni corte.</b> La Sección se constituye con las personas trabajadoras que acuden y se registran a mano en la lista de asistencia (Anexo 05). Todos los documentos del día hacen referencia a esa lista.</li>
+            <li><b>Al menos 30 personas registradas</b> para constituir la Sección. El quórum lo informa la Secretaría de la Mesa de Debates con la lista.</li>
+            <li><b>Solo los formatos del Secretario General</b> (Anexos 04, 05, 06, 07, 08 y 16) y los apoyos del Bloque 1, sin hojas membretadas.</li>
+            <li><b>No se informa nada al Secretario General de la Sección</b> antes de la elección: ese cargo se elige ese día.</li>
+          </ul>
+          <p class="small mb-0">Los formatos en blanco y el Léeme del día están en el <a href="${B1}" target="_blank">Bloque 1 del kit</a>. Aquí la plataforma imprime la lista de asistencia con los datos de esta Sección; no registra asistencia ni calcula quórum.</p>
+          ${padron.length ? `<p class="tiny muted mt-1 mb-0">Esta asamblea tiene ${padron.length} personas en un padrón congelado antes del 3 de octubre de 2026; quedó sin efecto y no se usa.</p>` : ''}
+        </div>
+        <div class="tarjeta">
+          <h3>Resultado</h3>
+          ${a.estado === 'Concluida' ? `<div class="aviso ok small">Celebrada. ${a.presentes_al_instalar != null ? `<b>${a.presentes_al_instalar}</b> personas registradas en la lista de asistencia.` : ''}${a.acta_url ? ` <a href="${esc(a.acta_url)}" target="_blank">Acta</a>` : ''}</div>` : (esOrg && ['En preparación', 'Convocada'].includes(a.estado) ? `<p class="small">Después de la asamblea, anota cuántas personas firmaron la lista de asistencia (Anexo 05) y, si la tienes, la liga del acta (Anexo 08).</p>
+            <div class="acciones"><input type="number" id="k-registradas" min="0" placeholder="Personas en la lista" style="max-width:180px"><input type="url" id="k-acta" placeholder="Liga del acta (opcional)" style="max-width:260px"><button class="btn" id="b-celebrada">Registrar que se celebró</button></div>` : '<p class="small muted mb-0">Pendiente de celebrarse.</p>')}
+        </div>
+      </div>
+      <div>
+        <div class="tarjeta">
+          <h3>Convocatoria <span class="tiny muted">(Anexo 01 del Secretario General)</span></h3>
+          <dl class="datos"><dt>Expedida</dt><dd>${a.fecha_expedicion ? fechaLarga(a.fecha_expedicion) : '—'}</dd><dt>Anticipación</dt><dd>${a.fecha_expedicion ? `${a.anticipacion_habiles} días hábiles` : 'sin fecha de expedición'}</dd></dl>
+          <p class="small"><b>Orden del día</b></p><ol class="small" style="margin:0 0 .6rem 1.1rem;padding:0">${(a.orden_del_dia || []).map(o => `<li>${esc(o.asunto)} <span class="tiny muted">· ${esc(o.caracter)}</span></li>`).join('') || '<li class="muted">Sin capturar</li>'}</ol>
+          ${a.notas ? `<p class="tiny muted" style="white-space:pre-line">${esc(a.notas)}</p>` : ''}
+          ${editable ? `<details><summary class="small"><b>Editar datos de la convocatoria</b></summary><form id="f-editar" class="mt-1">${formulario(a)}<div class="acciones"><button class="btn" type="submit">Guardar</button>${a.estado === 'En preparación' ? '<button class="btn secundario" type="button" id="b-convocada">Marcar como convocada (publicada)</button>' : ''}<button class="btn discreto" type="button" id="b-cancelar">Cancelar asamblea</button></div></form></details>` : ''}
+        </div>
+      </div>
+    </div>`;
+  enlazar(false, new Set());
+  const bc = $('#b-celebrada');
+  if (bc) bc.onclick = async () => { const n = parseInt($('#k-registradas').value, 10); if (!(n >= 0)) return toast('Escribe cuántas personas firmaron la lista de asistencia.', 'error');
+    if (!confirm(`Registrar que la Asamblea Constitutiva se celebró con ${n} personas en la lista de asistencia. ¿Confirmas?`)) return;
+    const { error } = await sb.rpc('concluir_constitutiva', { p_asamblea: a.id, p_registradas: n, p_acta_url: $('#k-acta').value || null }); if (error) return toast(error.message, 'error'); toast('Registrado.', 'ok'); cargar(); };
+}
 function render() {
+  if (a.tipo === 'Constitutiva') return renderConstitutiva();
   const congelado = !!a.corte_congelado_at; const abiertaRegistro = congelado && ['Convocada', 'En preparación', 'Instalada'].includes(a.estado);
   const editable = edita && ['En preparación', 'Convocada'].includes(a.estado);
   const registrados = new Set(asis.filter(s => s.afiliado_id).map(s => s.afiliado_id));
